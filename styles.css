@@ -13,6 +13,8 @@
   --oxygen: #67b5ff;
   --text: #f2f5f7;
   --font: "Trebuchet MS", "Segoe UI", sans-serif;
+  --inv-slot-size: clamp(36px, 5.6vw, 52px);
+  --inv-slot-gap: 6px;
 }
 
 * {
@@ -405,53 +407,58 @@ body {
   display: none;
 }
 
+#menu-panel.title-screen.creating-world {
+  align-items: flex-start;
+  justify-content: center;
+  background:
+    repeating-linear-gradient(0deg, #69482f 0 22px, #5b3d27 22px 44px),
+    repeating-linear-gradient(90deg, #6e4b30 0 22px, #5f4028 22px 44px);
+}
+
 #menu-panel.title-screen.creating-world::after {
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.18);
 }
 
 .world-loading {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: 10%;
+  transform: translateX(-50%);
   z-index: 7;
-  width: min(420px, 88vw);
+  width: min(320px, 85vw);
   display: grid;
   justify-items: center;
-  gap: 14px;
+  gap: 16px;
   text-align: center;
 }
 
 .world-loading-percent {
   font-family: "Lucida Console", "Consolas", monospace;
-  font-size: clamp(34px, 7vw, 64px);
+  font-size: clamp(28px, 5vw, 40px);
   line-height: 1;
   color: #f8f8f8;
-  text-shadow: 0 2px 0 #0d0d0d, 0 6px 16px rgba(0, 0, 0, 0.75);
+  text-shadow: 0 2px 0 #000;
 }
 
 .world-loading-preview-frame {
-  width: min(220px, 54vw);
+  width: min(230px, 62vw);
   aspect-ratio: 1;
-  padding: 12px;
-  border: 2px solid #2e2012;
-  outline: 2px solid #6d4c31;
-  background:
-    repeating-linear-gradient(45deg, #533924 0 12px, #4a321f 12px 24px),
-    linear-gradient(180deg, #6c4a2d 0%, #513521 100%);
-  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.4), 0 10px 22px rgba(0, 0, 0, 0.6);
+  padding: 0;
+  border: 2px solid #000;
+  outline: 0;
+  background: #000;
+  box-shadow: none;
 }
 
 .world-loading-box {
   width: 100%;
   height: 100%;
   background: #000;
-  border: 2px solid #090909;
+  border: 0;
 }
 
 .world-loading-label {
-  font-family: "Lucida Console", "Consolas", monospace;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  color: rgba(236, 236, 236, 0.86);
-  text-shadow: 0 1px 0 #111;
+  display: none;
 }
 
 .new-world-tabs {
@@ -704,8 +711,10 @@ body {
 #inventory-grid,
 #chest-grid {
   display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(9, var(--inv-slot-size));
+  gap: var(--inv-slot-gap);
+  justify-content: center;
+  width: min(100%, calc(var(--inv-slot-size) * 9 + var(--inv-slot-gap) * 8));
 }
 
 .inventory-craft-wrap {
@@ -718,14 +727,16 @@ body {
 
 .inventory-craft-grid {
   display: grid;
-  grid-template-columns: repeat(2, 52px);
-  gap: 6px;
+  grid-template-columns: repeat(2, var(--inv-slot-size));
+  gap: var(--inv-slot-gap);
 }
 
 .inventory-craft-grid .grid-slot,
 .inventory-craft-output {
-  width: 52px;
-  min-height: 52px;
+  width: var(--inv-slot-size);
+  min-width: var(--inv-slot-size);
+  min-height: var(--inv-slot-size);
+  height: var(--inv-slot-size);
 }
 
 .inventory-craft-arrow {
@@ -739,8 +750,101 @@ body {
   opacity: 0.55;
 }
 
+#crafting-panel {
+  min-width: min(94vw, 556px);
+  max-width: min(94vw, 556px);
+  padding: 12px;
+  border-radius: 0;
+  border: 2px solid #202020;
+  background: #c6c6c6;
+  color: #1f1f1f;
+  font-family: "Lucida Console", "Consolas", monospace;
+}
+
+#crafting-panel h2 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 400;
+  color: #1f1f1f;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+#crafting-panel .panel-actions {
+  margin-top: 12px;
+}
+
+#crafting-panel .panel-actions button {
+  border-radius: 0;
+  border: 2px solid #1a1a1a;
+  border-top-color: #f0f0f0;
+  border-left-color: #d2d2d2;
+  border-right-color: #363636;
+  border-bottom-color: #0b0b0b;
+  background: linear-gradient(180deg, #b1b1b1 0%, #7f7f7f 58%, #535353 100%);
+  color: #f5f5f5;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+#crafting-panel .grid-slot {
+  border-radius: 0;
+  border: 2px solid #5b5b5b;
+  border-top-color: #5f5f5f;
+  border-left-color: #5f5f5f;
+  border-right-color: #dadada;
+  border-bottom-color: #dadada;
+  background: #8b8b8b;
+}
+
+.crafting-table-ui {
+  display: grid;
+  grid-template-columns: max-content 40px max-content;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.crafting-table-grid {
+  display: grid;
+  grid-template-columns: repeat(3, var(--inv-slot-size));
+  gap: var(--inv-slot-gap);
+}
+
+.crafting-table-arrow {
+  font-size: 22px;
+  color: #5f5f5f;
+  text-align: center;
+  user-select: none;
+}
+
+.crafting-table-output.empty {
+  opacity: 0.5;
+}
+
+.crafting-table-inventory-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 400;
+  color: #222;
+}
+
+.crafting-inventory-main,
+.crafting-inventory-hotbar {
+  display: grid;
+  grid-template-columns: repeat(9, var(--inv-slot-size));
+  gap: var(--inv-slot-gap);
+  justify-content: flex-start;
+}
+
+.crafting-inventory-main {
+  margin-bottom: 10px;
+}
+
 .grid-slot {
-  min-height: 44px;
+  width: var(--inv-slot-size);
+  min-width: var(--inv-slot-size);
+  min-height: var(--inv-slot-size);
+  height: var(--inv-slot-size);
   border: 1px solid var(--ui-border);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.06);
@@ -751,6 +855,8 @@ body {
   text-align: center;
   position: relative;
   padding: 2px;
+  overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .grid-slot .item-icon {
