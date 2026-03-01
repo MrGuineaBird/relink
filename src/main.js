@@ -2416,7 +2416,13 @@ class Game {
     if (!this.fpHeldBlock) return;
     if (this.fpHeldBlock.parent) this.fpHeldBlock.parent.remove(this.fpHeldBlock);
     if (this.fpHeldBlock.geometry) this.fpHeldBlock.geometry.dispose();
-    if (this.fpHeldBlock.material) this.fpHeldBlock.material.dispose();
+    if (this.fpHeldBlock.material) {
+      const mats = Array.isArray(this.fpHeldBlock.material) ? this.fpHeldBlock.material : [this.fpHeldBlock.material];
+      mats.forEach((m) => {
+        if (m?.map) m.map.dispose();
+        if (m?.dispose) m.dispose();
+      });
+    }
     this.fpHeldBlock = null;
   }
   createHeldBlockMesh(blockId) {
@@ -2449,17 +2455,49 @@ class Game {
     mesh.scale.set(0.32, 0.32, 0.32);
     return mesh;
   }
+  createHeldItemMesh(itemId) {
+    const texUrl = this.resolveItemTextureUrl(itemId) || this.getItemIconDataUrl(itemId);
+    if (!texUrl) return null;
+    const tex = new THREE.TextureLoader().load(texUrl);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    const g = new THREE.PlaneGeometry(0.52, 0.52);
+    const m = new THREE.MeshBasicMaterial({
+      map: tex,
+      color: 0xffffff,
+      transparent: true,
+      alphaTest: 0.08,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 46;
+    // Slightly angled "sprite in hand" pose similar to held tools/items.
+    mesh.position.set(-0.3, 0.82, -0.62);
+    mesh.rotation.set(0.18, -0.62, 0.1);
+    mesh.scale.set(0.54, 0.54, 0.54);
+    return mesh;
+  }
   syncHeldBlockInHand(force = false) {
     if (!this.fpHand) return;
     const s = this.inv?.selSlot?.();
-    const blockId = s?.id ? ITEM[s.id]?.block : null;
+    const itemId = s?.id || "";
+    const blockId = itemId ? ITEM[itemId]?.block : null;
     const tex = this.world?.atlas?.texture;
-    const sig = `${blockId || 0}|${tex?.uuid || "none"}`;
+    const itemTex = itemId ? (this.itemTextureCache?.get(itemId) || "") : "";
+    const sig = `${itemId || "none"}|${blockId || 0}|${tex?.uuid || "none"}|${itemTex || "none"}`;
     if (!force && sig === this.fpHeldSig) return;
     this.clearHeldBlockInHand();
     this.fpHeldSig = sig;
-    if (!blockId || !tex) return;
-    this.fpHeldBlock = this.createHeldBlockMesh(blockId);
+    if (!itemId) return;
+    if (blockId && tex) this.fpHeldBlock = this.createHeldBlockMesh(blockId);
+    else this.fpHeldBlock = this.createHeldItemMesh(itemId);
     if (this.fpHeldBlock) this.fpHand.add(this.fpHeldBlock);
   }
   bindUI() {
@@ -2620,7 +2658,7 @@ class Game {
       u.rd.max = "4";
       if (Number(u.rd.value) > 4) u.rd.value = "4";
     }
-    u.pack?.addEventListener("change", () => { this.world.setPack(u.pack.value); this.itemIconCache.clear(); this.rHot(); this.rInv(); this.rInvCraft(); this.rCraft(); });
+    u.pack?.addEventListener("change", () => { this.world.setPack(u.pack.value); this.itemIconCache.clear(); this.itemTextureCache.clear(); this.itemTexturePending.clear(); this.rHot(); this.rInv(); this.rInvCraft(); this.rCraft(); this.syncHeldBlockInHand(true); });
     u.skin?.addEventListener("input", () => { this.pm.material.color.set(u.skin.value); this.redrawFirstPersonHandTexture(u.skin.value); });
     document.getElementById("toggle-third-person")?.addEventListener("click", () => { this.third = !this.third; });
     document.getElementById("toggle-creative")?.addEventListener("click", () => this.toggleCreative());
@@ -2967,6 +3005,7 @@ class Game {
     if (this.isInventoryPanelOpen()) { this.rInv(); this.rInvCraft(); }
     if (this.isCraftingPanelOpen()) this.rCraft();
     this.rInvCursor();
+    this.syncHeldBlockInHand(true);
   }
   resolveItemTextureUrl(id) {
     if (!id) return "";

@@ -751,14 +751,17 @@ body {
 }
 
 #crafting-panel {
-  min-width: min(94vw, 556px);
-  max-width: min(94vw, 556px);
+  --craft-slot-size: clamp(24px, 6vw, 42px);
+  width: min(96vw, 540px);
+  min-width: min(96vw, 540px);
+  max-width: min(96vw, 540px);
   padding: 12px;
   border-radius: 0;
   border: 2px solid #202020;
   background: #c6c6c6;
   color: #1f1f1f;
   font-family: "Lucida Console", "Consolas", monospace;
+  overflow-x: auto;
 }
 
 #crafting-panel h2 {
@@ -786,6 +789,11 @@ body {
 }
 
 #crafting-panel .grid-slot {
+  width: var(--craft-slot-size);
+  min-width: var(--craft-slot-size);
+  min-height: var(--craft-slot-size);
+  height: var(--craft-slot-size);
+  padding: 0;
   border-radius: 0;
   border: 2px solid #5b5b5b;
   border-top-color: #5f5f5f;
@@ -799,14 +807,14 @@ body {
   display: grid;
   grid-template-columns: max-content 40px max-content;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 8px;
   margin-bottom: 12px;
 }
 
 .crafting-table-grid {
   display: grid;
-  grid-template-columns: repeat(3, var(--inv-slot-size));
+  grid-template-columns: repeat(3, var(--craft-slot-size));
   gap: var(--inv-slot-gap);
 }
 
@@ -831,9 +839,11 @@ body {
 .crafting-inventory-main,
 .crafting-inventory-hotbar {
   display: grid;
-  grid-template-columns: repeat(9, var(--inv-slot-size));
+  grid-template-columns: repeat(9, var(--craft-slot-size));
   gap: var(--inv-slot-gap);
-  justify-content: flex-start;
+  justify-content: center;
+  width: max-content;
+  margin: 0 auto;
 }
 
 .crafting-inventory-main {
