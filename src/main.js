@@ -1,5 +1,4 @@
-﻿
-const THREE = window.THREE;
+﻿const THREE = window.THREE;
 if (!THREE) {
   throw new Error("THREE failed to load from ./assets/three.min.js");
 }
@@ -184,12 +183,20 @@ const BLOCK_TEXTURE_ROOTS = [
 ];
 const ITEM_TEXTURE_ROOTS = BLOCK_TEXTURE_ROOTS;
 const ITEM_TEXTURE_FILES = {
-  seed: ["wheat_seeds.png"],
+  log: ["logside.png", "oak_log.png"],
+  chest: ["chestfront.png", "chest_front.png"],
+  furnace: ["furnacefrontOFF.png", "furnace_front.png"],
+  crafting_table: ["craftingtableFRONT.png", "crafting_table_front.png"],
+  door: ["doorbottom.png", "doorTOP.png", "oak_door_bottom.png", "oak_door_top.png"],
+  redstone: ["redstone_dust.png", "redstone.png", "redstonedust.png"],
+  seed: ["seed.png", "wheat_seeds.png"],
   raw_meat: ["beef.png", "porkchop.png", "mutton.png", "chicken.png", "rabbit.png"],
   cooked_meat: ["cooked_beef.png", "cooked_porkchop.png", "cooked_mutton.png", "cooked_chicken.png", "cooked_rabbit.png"],
-  wood_pickaxe: ["wooden_pickaxe.png"],
-  wood_axe: ["wooden_axe.png"],
-  wood_shovel: ["wooden_shovel.png"],
+  raw_iron: ["iron.png", "raw_iron.png"],
+  raw_gold: ["gold.png", "raw_gold.png"],
+  wood_pickaxe: ["wood_pickaxe.png", "wooden_pickaxe.png"],
+  wood_axe: ["wood_axe.png", "woodaxe.png", "wooden_axe.png"],
+  wood_shovel: ["wood_shovel.png", "wooden_shovel.png"],
   sword: ["iron_sword.png", "stone_sword.png", "wooden_sword.png", "golden_sword.png", "diamond_sword.png", "netherite_sword.png"],
 };
 
@@ -451,7 +458,7 @@ const FACE = [
   { d: [0, 0, -1], c: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], s: 0.76 },
 ];
 
-const DOOR_THICK = 4 / 16;
+const DOOR_THICK = 5 / 16;
 const DOOR_DATA = Object.freeze({
   FACING_MASK: 0x3,
   OPEN_BIT: 1 << 2,
@@ -604,6 +611,7 @@ class World {
     this.genStructures = true;
     this.grassTexReq = 0;
     this.grassTexWarned = 0;
+    this.grassTexLoad = Promise.resolve({ skipped: true });
     this.atlas = buildAtlas(PACKS[this.pack] ? this.pack : "classic");
     this.applyGrassTextures();
   }
@@ -618,11 +626,12 @@ class World {
         console.warn("[WebCraft] Custom block textures require http(s) hosting. file:// taints canvas for WebGL. Run a local server (for example: `python -m http.server 8080`) and open http://localhost:8080/");
         this.grassTexWarned = 1;
       }
-      return;
+      this.grassTexLoad = Promise.resolve({ skipped: true, reason: "file-protocol" });
+      return this.grassTexLoad;
     }
     const req = ++this.grassTexReq;
     const atlas = this.atlas;
-    Promise.all(CUSTOM_TILE_TEXTURE_KEYS.map((k) => loadImageFromUrls(textureUrlsForKey(k)))).then((results) => {
+    this.grassTexLoad = Promise.all(CUSTOM_TILE_TEXTURE_KEYS.map((k) => loadImageFromUrls(textureUrlsForKey(k)))).then((results) => {
       if (req !== this.grassTexReq || atlas !== this.atlas) return;
       let changed = false;
       const loaded = {};
@@ -650,7 +659,15 @@ class World {
       if (changed) atlas.texture.needsUpdate = true;
       // Ensure visible update even on drivers/caches that don't refresh atlas-bound materials immediately.
       if (changed) for (const k of this.loaded) this.rebuildKey(k);
+      return { changed, loaded, missing };
+    }).catch((err) => {
+      console.warn("[WebCraft] Texture load failed.", err);
+      return { failed: true };
     });
+    return this.grassTexLoad;
+  }
+  waitForGrassTextures() {
+    return this.grassTexLoad || Promise.resolve({ skipped: true });
   }
   setPack(p) {
     this.pack = (typeof p === "string" && p.trim()) ? p.trim() : "classic";
@@ -758,7 +775,7 @@ class World {
   }
   doorNormalFacing(info) {
     if (!info?.open) return info?.facing ?? 0;
-    return info.hingeRight ? this.doorLeftFacing(info.facing) : this.doorRightFacing(info.facing);
+    return info.hingeRight ? this.doorRightFacing(info.facing) : this.doorLeftFacing(info.facing);
   }
   doorAABBAt(x, y, z, info = null) {
     const di = info || this.doorInfoAt(x, y, z);
@@ -821,9 +838,11 @@ class World {
     const w = fbm2(x / 190 + 100, z / 190 - 100, sd + 87);
     const d = fbm2(x / 140 - 220, z / 140 + 220, sd + 133);
     const v = fbm2(x / 95 + 50, z / 95 - 50, sd + 197);
+    const p = fbm2(x / 260 - 170, z / 260 + 170, sd + 211);
     if (this.dimension === "nether") return "ash";
     if (t > 0.72 && w < 0.34) return "desert";
     if (t < 0.25) return w > 0.5 ? "snowy_taiga" : "snow";
+    if (t > 0.33 && t < 0.74 && w > 0.34 && w < 0.66 && d > 0.28 && d < 0.78 && p > 0.43) return "plains";
     if (w > 0.76 && t > 0.56) {
       if (d > 0.72 && v > 0.58) return "bamboo_jungle";
       if (d < 0.42) return "sparse_jungle";
@@ -834,18 +853,18 @@ class World {
       if (d > 0.64) return "old_growth_pine_taiga";
       return "taiga";
     }
-    if (w > 0.58) {
+    if (w > 0.63) {
       if (d > 0.78 && v > 0.66) return "pale_garden";
       if (d > 0.68) return "dark_forest";
       if (v > 0.66) return "flower_forest";
       return "forest";
     }
-    if (w > 0.48) {
+    if (w > 0.56) {
       if (v > 0.73 && d > 0.55) return "old_growth_birch_forest";
       if (v > 0.58) return "birch_forest";
       return "forest";
     }
-    if (w > 0.4 && t > 0.55 && d > 0.55) return "sparse_jungle";
+    if (w > 0.5 && t > 0.55 && d > 0.55) return "sparse_jungle";
     return "plains";
   }
   height(x, z, b = null) {
@@ -858,6 +877,194 @@ class World {
     let h = base + detail + ridges + (cfg.heightBias || 0);
     if (this.dimension === "nether") h += 4;
     return clamp(Math.floor(h), 6, WORLD_H - 6);
+  }
+  shouldCarveCave(wx, y, wz, surfaceY) {
+    if (this.dimension === "nether") return false;
+    if (y < 2 || y >= surfaceY) return false;
+    const depth = surfaceY - y;
+    // Keep the surface crust intact so caves stay underground by default.
+    if (depth < 7) return false;
+    const region = fbm2(wx / 190, wz / 190, this.seed + 560, 3);
+    if (region < 0.44) return false;
+    const regionEdge = clamp((region - 0.44) / 0.28, 0, 1);
+    const continuity = fbm3(wx / 130, y / 60, wz / 130, this.seed + 561, 2);
+    if (continuity < 0.42 + (1 - regionEdge) * 0.07) return false;
+    const warpX = wx + (fbm3(wx / 88, y / 34, wz / 88, this.seed + 520, 2) - 0.5) * 10;
+    const warpZ = wz + (fbm3(wx / 88 + 81, y / 34, wz / 88 - 81, this.seed + 521, 2) - 0.5) * 10;
+    const density = fbm3(warpX / 70, y / 34, warpZ / 70, this.seed + 525, 2);
+
+    // "Cheese": broader caverns and blobs.
+    const cheeseNoise = fbm3(warpX / 44, y / 22, warpZ / 44, this.seed + 530, 4);
+    const cheeseThreshold = 0.71 - clamp((depth - 9) * 0.007, 0, 0.1) + (1 - regionEdge) * 0.05;
+    const cheese = depth > 10 && y < SEA + 12 && density > 0.5 && cheeseNoise > cheeseThreshold;
+
+    // "Spaghetti": winding mid-size tunnels.
+    const spaghettiNoise = fbm3(warpX / 24, y / 12, warpZ / 24, this.seed + 540, 4);
+    const spaghettiShape = Math.abs(fbm3(warpX / 16 + 23, y / 8, warpZ / 16 - 23, this.seed + 541, 3) - 0.5);
+    const nearSurfacePenalty = Math.max(0, (10 - depth) * 0.01);
+    const spaghetti = depth > 8 && spaghettiNoise > (0.66 + nearSurfacePenalty + (1 - regionEdge) * 0.04) && spaghettiShape < 0.2;
+
+    // "Noodle": thin twisty strands.
+    const noodleA = Math.abs(fbm3(wx / 11, y / 7, wz / 11, this.seed + 550, 3) - 0.5);
+    const noodleB = Math.abs(fbm3(wx / 11 + 47, y / 7, wz / 11 - 47, this.seed + 551, 3) - 0.5);
+    const noodle = depth > 12 && y < SEA + 9 && noodleA < (0.06 + regionEdge * 0.005) && noodleB < 0.17;
+
+    return cheese || spaghetti || noodle;
+  }
+  carveSurfaceEntrance(c, hm, bm, attempt = 0) {
+    if (this.dimension === "nether") return false;
+    const pick = hc(c.cx, attempt + 17, c.cz, this.seed + 446);
+    const lx = 2 + (pick % (CHUNK - 4));
+    const lz = 2 + (Math.floor(pick / 97) % (CHUNK - 4));
+    const ci = lx + CHUNK * lz;
+    const h = hm[ci] || 0;
+    if (h <= SEA + 5 || h >= WORLD_H - 7) return false;
+    const wx = c.cx * CHUNK + lx, wz = c.cz * CHUNK + lz;
+    const bio = bm?.[ci] || "plains";
+    // Moderate frequency so exploration regularly finds cave mouths.
+    const chance = bio === "desert" ? 0.16 : (bio.includes("jungle") ? 0.28 : 0.22);
+    if (r01(wx, h, wz, this.seed + 447) > chance) return false;
+    const mouthId = c.b[this.idx(lx, h, lz)];
+    if (mouthId === BLOCK.WATER || mouthId === BLOCK.LAVA || mouthId === BLOCK.LOG || mouthId === BLOCK.LEAF || mouthId === BLOCK.CHEST) return false;
+
+    // Pick a hillside / slope / edge-facing direction (not flat top).
+    const hAt = (px, pz) => (px >= 0 && px < CHUNK && pz >= 0 && pz < CHUNK) ? (hm[px + CHUNK * pz] || h) : h;
+    let out = null;
+    let bestEdgeScore = -999;
+    let bestFrontDrop = 0;
+    for (const dir of DIR4) {
+      const h1 = hAt(lx + dir.x, lz + dir.z);
+      const h2 = hAt(lx + dir.x * 2, lz + dir.z * 2);
+      const h3 = hAt(lx + dir.x * 3, lz + dir.z * 3);
+      const drop1 = h - h1;
+      const drop2 = h - h2;
+      const drop3 = h - h3;
+      const edgeScore = drop1 * 0.8 + drop2 * 0.55 + drop3 * 0.28;
+      if (edgeScore > bestEdgeScore) {
+        bestEdgeScore = edgeScore;
+        bestFrontDrop = drop1;
+        out = dir;
+      }
+    }
+    let localMin = h;
+    let localMax = h;
+    for (let ox = -2; ox <= 2; ox++) for (let oz = -2; oz <= 2; oz++) {
+      const px = lx + ox, pz = lz + oz;
+      if (px < 0 || px >= CHUNK || pz < 0 || pz >= CHUNK) continue;
+      const hh = hm[px + CHUNK * pz] || h;
+      if (hh < localMin) localMin = hh;
+      if (hh > localMax) localMax = hh;
+    }
+    const localRelief = localMax - localMin;
+    // Reject flats, allow gentle slopes and terrain edges.
+    if (!out || bestFrontDrop < 1 || localRelief < 2 || (bestEdgeScore < 1.35 && localRelief < 3)) return false;
+
+    const inward = { x: -out.x, z: -out.z };
+    const side = { x: inward.z, z: -inward.x };
+    const mouthFloor = h - 2;
+    if (mouthFloor < 4) return false;
+
+    const frontH1 = hAt(lx + out.x, lz + out.z);
+    const frontH2 = hAt(lx + out.x * 2, lz + out.z * 2);
+    // Needs visible side exposure within 1-2 blocks; prevents flat-field holes.
+    if (frontH1 > h - 1 && frontH2 > h - 1) return false;
+
+    // Connection logic: look 8-15 blocks inward for nearest cave pocket (or cave-noise pocket).
+    const minReach = 8;
+    const maxReach = 15;
+    const isOpenTwoHigh = (px, py, pz) => {
+      if (px < 1 || px >= CHUNK - 1 || pz < 1 || pz >= CHUNK - 1 || py < 2 || py + 1 >= WORLD_H - 1) return false;
+      const i0 = this.idx(px, py, pz), i1 = this.idx(px, py + 1, pz);
+      return c.b[i0] === BLOCK.AIR && c.b[i1] === BLOCK.AIR;
+    };
+    let target = null;
+    let bestScore = Infinity;
+    const considerTarget = (tx, ty, tz, step, lat, synthetic = false) => {
+      const score = step * 1.1 + Math.abs(lat) * 1.55 + Math.abs(ty - mouthFloor) * 1.15 + (synthetic ? 1.6 : 0);
+      if (score < bestScore) { bestScore = score; target = { x: tx, y: ty, z: tz, step, synthetic }; }
+    };
+
+    // Pass 1: nearest real cave voxels.
+    for (let step = minReach; step <= maxReach; step++) {
+      const cx0 = lx + inward.x * step;
+      const cz0 = lz + inward.z * step;
+      if (cx0 < 1 || cx0 >= CHUNK - 1 || cz0 < 1 || cz0 >= CHUNK - 1) break;
+      for (let lat = -3; lat <= 3; lat++) {
+        const tx = cx0 + side.x * lat;
+        const tz = cz0 + side.z * lat;
+        if (tx < 1 || tx >= CHUNK - 1 || tz < 1 || tz >= CHUNK - 1) continue;
+        const surf = hm[tx + CHUNK * tz] || mouthFloor + 2;
+        const maxY = Math.min(mouthFloor, surf - 3);
+        const minY = Math.max(4, surf - 20);
+        for (let y = maxY; y >= minY; y--) if (isOpenTwoHigh(tx, y, tz)) considerTarget(tx, y, tz, step, lat, false);
+      }
+    }
+
+    // Pass 2 fallback: nearest cave-noise pocket, then tunnel to it.
+    if (!target) {
+      for (let step = minReach; step <= maxReach; step++) {
+        const cx0 = lx + inward.x * step;
+        const cz0 = lz + inward.z * step;
+        if (cx0 < 1 || cx0 >= CHUNK - 1 || cz0 < 1 || cz0 >= CHUNK - 1) break;
+        for (let lat = -2; lat <= 2; lat++) {
+          const tx = cx0 + side.x * lat;
+          const tz = cz0 + side.z * lat;
+          if (tx < 1 || tx >= CHUNK - 1 || tz < 1 || tz >= CHUNK - 1) continue;
+          const surf = hm[tx + CHUNK * tz] || mouthFloor + 2;
+          const maxY = Math.min(mouthFloor, surf - 3);
+          const minY = Math.max(4, surf - 20);
+          const wx2 = c.cx * CHUNK + tx, wz2 = c.cz * CHUNK + tz;
+          for (let y = maxY; y >= minY; y--) if (this.shouldCarveCave(wx2, y, wz2, surf)) considerTarget(tx, y, tz, step, lat, true);
+        }
+      }
+    }
+    if (!target) return false;
+
+    const digAir = (px, py, pz) => {
+      if (px < 0 || px >= CHUNK || pz < 0 || pz >= CHUNK || py < 2 || py >= WORLD_H - 1) return false;
+      const surf = hm[px + CHUNK * pz] || 0;
+      // Keep surface crust: never remove the top block itself.
+      if (py >= surf) return false;
+      const i = this.idx(px, py, pz);
+      const id = c.b[i];
+      if (id === BLOCK.AIR) return false;
+      if (id === BLOCK.WATER || id === BLOCK.LAVA || id === BLOCK.CHEST) return false;
+      c.b[i] = BLOCK.AIR;
+      return true;
+    };
+
+    // Small organic mouth on the cliff face.
+    const mouthHalfWidth = r01(wx, mouthFloor, wz, this.seed + 448) < 0.3 ? 1 : 0;
+    for (let w = -mouthHalfWidth; w <= mouthHalfWidth; w++) {
+      const mx = lx + side.x * w, mz = lz + side.z * w;
+      digAir(mx, mouthFloor, mz);
+      digAir(mx, mouthFloor + 1, mz);
+      digAir(mx + out.x, mouthFloor, mz + out.z);
+      digAir(mx + out.x, mouthFloor + 1, mz + out.z);
+    }
+
+    // Horizontal tunnel into the hill with slight wobble and mild vertical drift.
+    let carved = 0;
+    const len = Math.max(3, target.step + 1);
+    for (let s = 0; s <= len; s++) {
+      const t = s / len;
+      let cx2 = Math.round(lerp(lx, target.x, t));
+      let cz2 = Math.round(lerp(lz, target.z, t));
+      const wobble = r01(wx + s, mouthFloor, wz - s, this.seed + 449) < 0.24 ? (r01(wx - s, mouthFloor, wz + s, this.seed + 450) < 0.5 ? -1 : 1) : 0;
+      if (wobble) { cx2 += side.x * wobble; cz2 += side.z * wobble; }
+      const cy = Math.round(lerp(mouthFloor, target.y, t));
+      const r = (s > 1 && s < len - 1 && r01(wx, cy + s, wz, this.seed + 451) < 0.2) ? 1 : 0;
+      for (let w = -r; w <= r; w++) {
+        const px = cx2 + side.x * w, pz = cz2 + side.z * w;
+        carved += digAir(px, cy, pz) ? 1 : 0;
+        carved += digAir(px, cy + 1, pz) ? 1 : 0;
+      }
+    }
+    if (target.synthetic) {
+      // Ensure fallback paths open into a small cave pocket at tunnel end.
+      for (const [dx, dy, dz] of [[0, 0, 0], [0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]]) carved += digAir(target.x + dx, target.y + dy, target.z + dz) ? 1 : 0;
+    }
+    return carved > 6;
   }
   canTreeReplace(id) { return id === BLOCK.AIR || id === BLOCK.LEAF || id === BLOCK.CROP; }
   solidGroundForTree(id) { return id !== BLOCK.AIR && id !== BLOCK.WATER && id !== BLOCK.LAVA && id !== BLOCK.LEAF && id !== BLOCK.CROP; }
@@ -1104,9 +1311,7 @@ class World {
         let id = BLOCK.STONE;
         if (this.dimension === "nether") id = BLOCK.STONE;
         else id = y === h ? cfg.top : y > h - 4 ? cfg.fill : BLOCK.STONE;
-        const caveN = fbm3(wx / 25, y / 18, wz / 25, this.seed + 301, 3);
-        const deepCave = y < h - 18 && y < SEA - 10 && caveN > 0.7;
-        if (deepCave) id = BLOCK.AIR;
+        if (id !== BLOCK.AIR && this.shouldCarveCave(wx, y, wz, h)) id = BLOCK.AIR;
         if (id === BLOCK.STONE) {
           const o = r01(wx, y, wz, this.seed + 500);
           if (y < 42 && o < 0.015) id = BLOCK.COAL;
@@ -1135,13 +1340,24 @@ class World {
     }
     for (let lx = 0; lx < CHUNK; lx++) for (let lz = 0; lz < CHUNK; lz++) {
       const ci = lx + CHUNK * lz;
+      const wx = cx * CHUNK + lx, wz = cz * CHUNK + lz;
       const bio = bm[ci], h = hm[ci];
       const topFill = this.biomeCfg(bio).fill;
-      for (let y = h - 1; y >= Math.max(1, h - 18); y--) {
+      for (let y = h - 1; y >= Math.max(1, h - 12); y--) {
         const ii = this.idx(lx, y, lz);
         const id = c.b[ii];
-        if (id === BLOCK.AIR || id === BLOCK.WATER || id === BLOCK.LAVA) c.b[ii] = y >= h - 4 ? topFill : BLOCK.STONE;
+        if (id !== BLOCK.AIR && id !== BLOCK.WATER && id !== BLOCK.LAVA) continue;
+        if (this.shouldCarveCave(wx, y, wz, h)) continue;
+        const depth = h - y;
+        if (depth <= 4) c.b[ii] = topFill;
+        else if (id === BLOCK.WATER || id === BLOCK.LAVA) c.b[ii] = BLOCK.STONE;
       }
+    }
+    if (this.dimension !== "nether") {
+      // Moderate frequency target: noticeable but not spammy.
+      const roll = r01(cx, 73, cz, this.seed + 970);
+      const attempts = roll < 0.6 ? 1 : (roll < 0.78 ? 2 : 0);
+      for (let i = 0; i < attempts; i++) this.carveSurfaceEntrance(c, hm, bm, i);
     }
     const dominantBio = this.dominantBiome(bm);
     if (this.genStructures) {
@@ -1385,15 +1601,31 @@ class World {
       const zA = box.minZ, zB = box.maxZ;
       const faceA = [[box.minX, y, zA], [box.minX, y + 1, zA], [box.maxX, y + 1, zA], [box.maxX, y, zA]];
       const faceB = [[box.maxX, y, zB], [box.maxX, y + 1, zB], [box.minX, y + 1, zB], [box.minX, y, zB]];
+      const sideL = [[box.minX, y, zB], [box.minX, y + 1, zB], [box.minX, y + 1, zA], [box.minX, y, zA]];
+      const sideR = [[box.maxX, y, zA], [box.maxX, y + 1, zA], [box.maxX, y + 1, zB], [box.maxX, y, zB]];
+      const top = [[box.minX, y + 1, zB], [box.maxX, y + 1, zB], [box.maxX, y + 1, zA], [box.minX, y + 1, zA]];
+      const bottom = [[box.minX, y, zA], [box.maxX, y, zA], [box.maxX, y, zB], [box.minX, y, zB]];
       this.pushDoorQuad(buf, faceA, [0, 0, -1], uv, col, 0.8);
       this.pushDoorQuad(buf, faceB, [0, 0, 1], uv, col, 0.86);
+      this.pushDoorQuad(buf, sideL, [-1, 0, 0], uv, col, 0.74);
+      this.pushDoorQuad(buf, sideR, [1, 0, 0], uv, col, 0.74);
+      this.pushDoorQuad(buf, top, [0, 1, 0], uv, col, 0.92);
+      this.pushDoorQuad(buf, bottom, [0, -1, 0], uv, col, 0.62);
       return;
     }
     const xA = box.minX, xB = box.maxX;
     const faceA = [[xA, y, box.maxZ], [xA, y + 1, box.maxZ], [xA, y + 1, box.minZ], [xA, y, box.minZ]];
     const faceB = [[xB, y, box.minZ], [xB, y + 1, box.minZ], [xB, y + 1, box.maxZ], [xB, y, box.maxZ]];
+    const sideN = [[xA, y, box.minZ], [xA, y + 1, box.minZ], [xB, y + 1, box.minZ], [xB, y, box.minZ]];
+    const sideS = [[xB, y, box.maxZ], [xB, y + 1, box.maxZ], [xA, y + 1, box.maxZ], [xA, y, box.maxZ]];
+    const top = [[xA, y + 1, box.maxZ], [xB, y + 1, box.maxZ], [xB, y + 1, box.minZ], [xA, y + 1, box.minZ]];
+    const bottom = [[xA, y, box.minZ], [xB, y, box.minZ], [xB, y, box.maxZ], [xA, y, box.maxZ]];
     this.pushDoorQuad(buf, faceA, [-1, 0, 0], uv, col, 0.8);
     this.pushDoorQuad(buf, faceB, [1, 0, 0], uv, col, 0.86);
+    this.pushDoorQuad(buf, sideN, [0, 0, -1], uv, col, 0.74);
+    this.pushDoorQuad(buf, sideS, [0, 0, 1], uv, col, 0.74);
+    this.pushDoorQuad(buf, top, [0, 1, 0], uv, col, 0.92);
+    this.pushDoorQuad(buf, bottom, [0, -1, 0], uv, col, 0.62);
   }
   mesh(c) {
     const o = { p: [], n: [], cl: [], uv: [] }, t = { p: [], n: [], cl: [], uv: [] };
@@ -1675,6 +1907,19 @@ class AudioSys {
 
 class Particles {
   constructor(scene, scale = 1, max = 420) { this.scene = scene; this.p = []; this.scale = scale; this.max = max; }
+  setPerf(scale = this.scale, max = this.max) {
+    const s = Number(scale);
+    const m = Number(max);
+    this.scale = clamp(Number.isFinite(s) ? s : this.scale, 0.2, 1.4);
+    this.max = clamp(Math.floor(Number.isFinite(m) ? m : this.max), 40, 900);
+    while (this.p.length > this.max) {
+      const q = this.p.shift();
+      if (!q) break;
+      q.m.geometry.dispose();
+      q.m.material.dispose();
+      this.scene.remove(q.m);
+    }
+  }
   burst(pos, hex = 0xffffff, n = 12, s = 2.5, life = 0.55) {
     const count = clamp(Math.floor(n * this.scale), 1, 120);
     if (this.p.length >= this.max) return;
@@ -2037,8 +2282,36 @@ class MobSys {
     }
     return 0;
   }
+  isChunkLoadedAt(pos) {
+    const w = this.g.world;
+    const [cx, cz] = w.cc(pos.x, pos.z);
+    return w.loaded.has(w.ck(cx, cz));
+  }
+  unloadOutsideLoadedChunks() {
+    for (let i = this.m.length - 1; i >= 0; i--) {
+      const m = this.m[i];
+      if (m.dead) { this.m.splice(i, 1); continue; }
+      if (this.isChunkLoadedAt(m.p)) continue;
+      this.g.scene.remove(m.mesh);
+      this.m.splice(i, 1);
+    }
+    for (let i = this.v.length - 1; i >= 0; i--) {
+      const v = this.v[i];
+      if (v.rider === "player") continue;
+      if (this.isChunkLoadedAt(v.p)) continue;
+      this.g.scene.remove(v.mesh);
+      this.v.splice(i, 1);
+    }
+    for (let i = this.ar.length - 1; i >= 0; i--) {
+      const a = this.ar[i];
+      if (this.isChunkLoadedAt(a.p)) continue;
+      this.g.scene.remove(a.mesh);
+      this.ar.splice(i, 1);
+    }
+  }
   up(dt) {
     const p = this.g.p, w = this.g.world;
+    this.unloadOutsideLoadedChunks();
     this.spawn -= dt;
     if (this.spawn <= 0) {
       this.spawn = this.spawnInterval;
@@ -2123,6 +2396,7 @@ class Game {
       particles: LOW_END_DEVICE ? { scale: 0.45, max: 180 } : { scale: 1, max: 420 },
       mobs: LOW_END_DEVICE ? { spawnInterval: 1.9, hostileCap: 6, passiveCap: 5 } : { spawnInterval: 1.2, hostileCap: 10, passiveCap: 8 },
     };
+    this.setupAdaptivePerf();
     this.canvas = document.getElementById("game");
     this.r = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: this.perf.antialias, alpha: false });
     this.r.autoClear = false;
@@ -2144,6 +2418,7 @@ class Game {
     this.world = new World(this.scene, Math.floor(Math.random() * 1e9));
     this.world.setPerf(this.perf.world);
     this.inv = new Inventory(); this.audio = new AudioSys(); this.pfx = new Particles(this.scene, this.perf.particles.scale, this.perf.particles.max); this.mobs = new MobSys(this); this.mobs.setPerf(this.perf.mobs);
+    this.applyAdaptiveQuality(true);
     this.breakFx = this.mkBreakFx();
     this.p = { pos: new THREE.Vector3(8.5, 45, 8.5), vel: new THREE.Vector3(), g: 0, swim: 0, hp: 20, hu: 20, ox: 20, xp: 0, lv: 1, creative: 0, sprint: 0, at: 0, bt: null, bp: 0, fs: 0, mount: null, emo: 0, data: {} };
     this.resetFoodState(20, 5);
@@ -2176,6 +2451,146 @@ class Game {
     this.ui3dCam.top = 1;
     this.ui3dCam.bottom = -1;
     this.ui3dCam.updateProjectionMatrix();
+  }
+  setupAdaptivePerf() {
+    const baseWorld = { ...this.perf.world };
+    const baseMobs = { ...this.perf.mobs };
+    const baseParticles = { ...this.perf.particles };
+    const baseLoadInterval = this.perf.low ? 0.08 : 0.02;
+    this.adaptivePerf = {
+      enabled: true,
+      quality: this.perf.low ? 0.8 : 1,
+      appliedQuality: -1,
+      emaDt: this.perf.low ? 1 / 42 : 1 / 60,
+      evalCd: 0.4,
+      minQuality: this.perf.low ? 0.42 : 0.5,
+      minPixelRatio: this.perf.low ? 0.62 : 0.85,
+      maxPixelRatio: this.perf.pixelRatioMax,
+      baseLoadInterval,
+      maxLoadInterval: this.perf.low ? 0.14 : 0.07,
+      baseMapInterval: this.perf.mapInterval,
+      maxMapInterval: this.perf.mapInterval * (this.perf.low ? 2.6 : 2.2),
+      baseMapRadius: this.perf.mapRadius,
+      minMapRadius: Math.max(14, Math.floor(this.perf.mapRadius * 0.6)),
+      baseMapStep: this.perf.mapStep,
+      maxMapStep: Math.max(this.perf.mapStep + 1, this.perf.low ? 3 : 2),
+      baseRainCount: this.perf.rainCount,
+      minRainCount: Math.max(80, Math.floor(this.perf.rainCount * 0.22)),
+      baseCloudCount: this.perf.cloudCount,
+      minCloudCount: Math.max(8, Math.floor(this.perf.cloudCount * 0.35)),
+      baseWorld,
+      minWorld: {
+        rebuildBudget: Math.max(1, Math.floor(baseWorld.rebuildBudget * 0.45)),
+        chunkLights: Math.max(0, baseWorld.chunkLights - 6),
+        fluidLimit: Math.max(60, Math.floor(baseWorld.fluidLimit * 0.55)),
+        decayLimit: Math.max(30, Math.floor(baseWorld.decayLimit * 0.55)),
+        fireLimit: Math.max(30, Math.floor(baseWorld.fireLimit * 0.55)),
+      },
+      baseMobs,
+      minMobs: {
+        spawnInterval: Math.min(3.2, baseMobs.spawnInterval * 1.7),
+        hostileCap: Math.max(3, Math.floor(baseMobs.hostileCap * 0.55)),
+        passiveCap: Math.max(3, Math.floor(baseMobs.passiveCap * 0.6)),
+      },
+      baseParticles,
+      minParticles: {
+        scale: Math.max(0.3, baseParticles.scale * 0.42),
+        max: Math.max(90, Math.floor(baseParticles.max * 0.45)),
+      },
+      lastWorld: null,
+      lastMobs: null,
+      pixelRatio: 0,
+    };
+    this.loadInterval = baseLoadInterval;
+    this.mapInterval = this.perf.mapInterval;
+    this.mapRadius = this.perf.mapRadius;
+    this.mapStep = this.perf.mapStep;
+    this.cloudDrift = 1.3;
+  }
+  updateAdaptiveQuality(dt) {
+    const ap = this.adaptivePerf;
+    if (!ap?.enabled || !Number.isFinite(dt) || dt <= 0) return;
+    const frameDt = clamp(dt, 1 / 240, 0.2);
+    const blend = clamp(dt * 2.5, 0.04, 0.22);
+    ap.emaDt = lerp(ap.emaDt, frameDt, blend);
+    ap.evalCd -= dt;
+    if (ap.evalCd > 0) return;
+    const fps = 1 / Math.max(ap.emaDt, 1e-4);
+    let q = ap.quality;
+    if (fps < 26) q -= 0.18;
+    else if (fps < 34) q -= 0.12;
+    else if (fps < 42) q -= 0.07;
+    else if (fps < 50) q -= 0.03;
+    else if (fps > 59) q += 0.035;
+    else if (fps > 55) q += 0.02;
+    q = clamp(q, ap.minQuality, 1);
+    ap.evalCd = q < ap.quality ? 0.28 : 1.1;
+    ap.quality = q;
+    if (Math.abs(ap.appliedQuality - q) > 0.02) this.applyAdaptiveQuality();
+  }
+  applyAdaptiveQuality(force = false) {
+    const ap = this.adaptivePerf;
+    if (!ap) return;
+    const q = clamp(ap.quality, ap.minQuality, 1);
+    if (!force && Math.abs(ap.appliedQuality - q) < 0.02) return;
+    ap.appliedQuality = q;
+    const t = smooth(q);
+
+    const targetPixelRatio = clamp(lerp(ap.minPixelRatio, ap.maxPixelRatio, t), ap.minPixelRatio, ap.maxPixelRatio);
+    if (this.r && (force || Math.abs((ap.pixelRatio || 0) - targetPixelRatio) > 0.035)) {
+      ap.pixelRatio = targetPixelRatio;
+      this.r.setPixelRatio(Math.min(window.devicePixelRatio || 1, targetPixelRatio));
+      this.r.setSize(window.innerWidth, window.innerHeight, false);
+    }
+
+    this.loadInterval = lerp(ap.maxLoadInterval, ap.baseLoadInterval, t);
+    this.mapInterval = lerp(ap.maxMapInterval, ap.baseMapInterval, t);
+    this.mapRadius = Math.round(lerp(ap.minMapRadius, ap.baseMapRadius, t));
+    this.mapStep = Math.max(1, Math.round(lerp(ap.maxMapStep, ap.baseMapStep, t)));
+    this.cloudDrift = lerp(0.8, 1.35, t);
+
+    if (this.rain?.points?.geometry) {
+      const rainCount = clamp(Math.round(lerp(ap.minRainCount, ap.baseRainCount, t)), 0, this.rain.n || ap.baseRainCount);
+      this.rain.active = rainCount;
+      this.rain.points.geometry.setDrawRange(0, rainCount);
+      if (this.rain.points.material) this.rain.points.material.opacity = lerp(0.45, 0.64, t);
+    }
+
+    if (this.clouds?.children?.length) {
+      const visibleClouds = clamp(Math.round(lerp(ap.minCloudCount, ap.baseCloudCount, t)), 0, this.clouds.children.length);
+      for (let i = 0; i < this.clouds.children.length; i++) this.clouds.children[i].visible = i < visibleClouds;
+      this.clouds.visible = visibleClouds > 0;
+    }
+
+    const worldPerf = {
+      rebuildBudget: Math.round(lerp(ap.minWorld.rebuildBudget, ap.baseWorld.rebuildBudget, t)),
+      chunkLights: Math.round(lerp(ap.minWorld.chunkLights, ap.baseWorld.chunkLights, t)),
+      fluidLimit: Math.round(lerp(ap.minWorld.fluidLimit, ap.baseWorld.fluidLimit, t)),
+      decayLimit: Math.round(lerp(ap.minWorld.decayLimit, ap.baseWorld.decayLimit, t)),
+      fireLimit: Math.round(lerp(ap.minWorld.fireLimit, ap.baseWorld.fireLimit, t)),
+    };
+    const worldChanged = !ap.lastWorld || Object.keys(worldPerf).some((k) => ap.lastWorld[k] !== worldPerf[k]);
+    if (this.world && (force || worldChanged)) {
+      this.world.setPerf(worldPerf);
+      ap.lastWorld = { ...worldPerf };
+    }
+
+    const mobsPerf = {
+      spawnInterval: lerp(ap.minMobs.spawnInterval, ap.baseMobs.spawnInterval, t),
+      hostileCap: Math.round(lerp(ap.minMobs.hostileCap, ap.baseMobs.hostileCap, t)),
+      passiveCap: Math.round(lerp(ap.minMobs.passiveCap, ap.baseMobs.passiveCap, t)),
+    };
+    const mobsChanged = !ap.lastMobs || Object.keys(mobsPerf).some((k) => ap.lastMobs[k] !== mobsPerf[k]);
+    if (this.mobs && (force || mobsChanged)) {
+      this.mobs.setPerf(mobsPerf);
+      ap.lastMobs = { ...mobsPerf };
+    }
+
+    if (this.pfx?.setPerf) {
+      const particleScale = lerp(ap.minParticles.scale, ap.baseParticles.scale, t);
+      const particleMax = Math.round(lerp(ap.minParticles.max, ap.baseParticles.max, t));
+      this.pfx.setPerf(particleScale, particleMax);
+    }
   }
   ensureFoodState() {
     if (!this.p.food) {
@@ -2335,7 +2750,8 @@ class Game {
     const n = this.perf?.rainCount || 1200, p = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) { p[i * 3] = (Math.random() - 0.5) * 60; p[i * 3 + 1] = Math.random() * 40; p[i * 3 + 2] = (Math.random() - 0.5) * 60; }
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(p, 3));
-    this.rain = { points: new THREE.Points(g, new THREE.PointsMaterial({ color: 0x97bff8, size: 0.1, transparent: true, opacity: 0.6 })), n };
+    this.rain = { points: new THREE.Points(g, new THREE.PointsMaterial({ color: 0x97bff8, size: 0.1, transparent: true, opacity: 0.6 })), n, active: n };
+    this.rain.points.geometry.setDrawRange(0, n);
     this.rain.points.visible = false; this.weather = { t: "clear", timer: 24, i: 0 };
   }
   playerModel() {
@@ -2728,9 +3144,13 @@ class Game {
     try {
       this.setWorldLoading(0, "Preparing world...");
       await this.waitFrame();
-      this.setWorldLoading(24, "Generating terrain...");
+      this.setWorldLoading(20, "Loading textures...");
       await this.waitFrame();
-      this.newWorld(seed, slot, worldCfg);
+      this.newWorld(seed, slot, worldCfg, { deferTerrain: true, announce: false });
+      await this.world?.waitForGrassTextures?.();
+      this.setWorldLoading(54, "Generating terrain...");
+      await this.waitFrame();
+      this.finishNewWorldGeneration(seed, worldCfg, { announce: true });
       this.setWorldLoading(100, "Done");
       await this.waitFrame();
       await this.waitFrame();
@@ -3381,7 +3801,9 @@ class Game {
     const n = Math.hypot(l, z) || 1;
     return { x: l / n, z: z / n };
   }
-  newWorld(seed, slot, cfg = null) {
+  newWorld(seed, slot, cfg = null, opts = {}) {
+    const deferTerrain = !!opts?.deferTerrain;
+    const announce = opts?.announce !== false;
     const worldCfg = { ...this.newWorldCfg, ...(cfg || {}) };
     this.itemIconCache.clear();
     if (this.world) {
@@ -3390,6 +3812,7 @@ class Game {
     }
     this.slot = slot; this.world = new World(this.scene, seed, this.ui.pack.value || "classic"); this.world.setPerf(this.perf.world); this.world.setRD(Number(this.ui.rd.value) || 4);
     this.world.setWorldOptions({ structures: worldCfg.structures !== false });
+    this.applyAdaptiveQuality(true);
     this.mobs.clear(); this.items.forEach((d) => this.scene.remove(d.mesh)); this.items = [];
     this.clearBreakFx();
     this.inv = new Inventory();
@@ -3398,14 +3821,23 @@ class Game {
     this.invCursor = mk();
     this.p.pos.set(0.5, 40, 0.5); this.p.vel.set(0, 0, 0); this.p.hp = 20; this.resetFoodState(20, 5); this.p.ox = 20; this.p.xp = 0; this.p.lv = 1; this.p.creative = worldCfg.gamemode === "creative" ? 1 : 0; this.p.mount = null; this.p.data.cheats = !!worldCfg.cheats; this.p.data.difficulty = worldCfg.difficulty || "normal"; this.p.data.naturalRegen = this.p.data.naturalRegen !== false;
     this.time = { day: 6000, noon: 12000, sunset: 18000, night: 23000 }[worldCfg.startTime] ?? 6000; this.achs.clear(); this.replay = []; this.replayOn = 0;
+    if (deferTerrain) return;
+    this.finishNewWorldGeneration(seed, worldCfg, { announce });
+  }
+  finishNewWorldGeneration(seed, worldCfg, opts = {}) {
+    const announce = opts?.announce !== false;
     this.world.updateLoaded(this.p.pos);
     this.p.pos.copy(this.findSpawn(80, 0, 0));
     this.world.updateLoaded(this.p.pos);
     this.p.fs = this.p.pos.y;
     if (worldCfg.bonusChest) this.spawnBonusChestNearSpawn();
-    this.rHot(); this.rInv(); this.rInvCraft(); this.rCraft(); this.chat(`New world started. Seed ${seed}.`); ["Tutorial: Left click to break, right click to place/interact.", "Tutorial: E inventory. Use a crafting table block to craft.", "Tutorial: Switch to creative with M. Use /brush stone 3 for terrain tools."].forEach((x) => this.chat(x));
-    if (!worldCfg.structures) this.chat("World option: structures disabled.");
-    if (this.perf.low && !this.perfAnnounced) { this.chat("Performance mode enabled for low-end devices: reduced shadows/lights/effects and chunk batching."); this.perfAnnounced = true; }
+    this.rHot(); this.rInv(); this.rInvCraft(); this.rCraft();
+    if (announce) {
+      this.chat(`New world started. Seed ${seed}.`);
+      ["Tutorial: Left click to break, right click to place/interact.", "Tutorial: E inventory. Use a crafting table block to craft.", "Tutorial: Switch to creative with M. Use /brush stone 3 for terrain tools."].forEach((x) => this.chat(x));
+      if (!worldCfg.structures) this.chat("World option: structures disabled.");
+      if (this.perf.low && !this.perfAnnounced) { this.chat("Performance mode enabled for low-end devices: reduced shadows/lights/effects and chunk batching."); this.perfAnnounced = true; }
+    }
   }
   spawnBonusChestNearSpawn() {
     const offs = [[2, 0], [0, 2], [-2, 0], [0, -2], [3, 1], [-3, -1]];
@@ -3440,6 +3872,7 @@ class Game {
       if (this.world.atlas?.texture) this.world.atlas.texture.dispose();
     }
     this.world = new World(this.scene, v.world.seed, packName); this.world.setPerf(this.perf.world); this.world.setRD(Number(this.ui.rd.value) || 4); this.world.load(v.world); this.world.updateLoaded(new THREE.Vector3(...v.player.pos));
+    this.applyAdaptiveQuality(true);
     this.clearBreakFx();
     this.p.pos.fromArray(v.player.pos); this.p.vel.fromArray(v.player.vel || [0, 0, 0]); this.p.hp = v.player.hp; this.loadFoodState(v.player || {}); this.p.ox = v.player.ox; this.p.xp = v.player.xp; this.p.lv = v.player.lv; this.p.creative = v.player.creative; this.yaw = v.player.yaw || 0; this.pitch = v.player.pitch || 0; this.p.data.difficulty = v.player?.difficulty || this.p.data?.difficulty || "normal"; this.p.data.naturalRegen = v.player?.naturalRegen !== false;
     this.inv = new Inventory(); this.inv.load(v.inv); this.invCraft = Array.from({ length: 4 }, () => mk()); this.tableCraft = Array.from({ length: 9 }, () => mk()); this.invCursor = mk(); this.time = v.time || 6000; this.achs = new Set(v.ach || []); this.weather = v.weather || { t: "clear", timer: 20, i: 0 }; this.replay = v.replay || [];
@@ -3568,10 +4001,17 @@ class Game {
   skyUp(dt) {
     this.time = (this.time + dt * 16) % 24000; const t = this.time / 24000, a = t * Math.PI * 2, sy = Math.sin(a), day = clamp((sy + 0.2) * 0.95, 0.08, 1);
     const col = new THREE.Color().setHSL(0.58, 0.6, lerp(0.08, 0.68, day)); this.sky.material.color.copy(col); this.scene.fog.color.copy(col.clone().multiplyScalar(0.82));
+    this.sky.position.copy(this.p.pos);
+    this.r.setClearColor(col, 1);
     const r = 100; this.sun.position.set(Math.cos(a) * r, sy * r, Math.sin(a) * r); this.sun.intensity = day * (this.weather.t === "storm" ? 0.45 : 0.95); this.amb.intensity = 0.18 + day * 0.55;
     this.sunBall.position.copy(this.sun.position.clone().multiplyScalar(0.9)); this.moon.position.copy(this.sun.position.clone().multiplyScalar(-0.88));
-    this.clouds.position.x += dt * 1.3; if (this.clouds.position.x > 120) this.clouds.position.x = -120;
+    if (this.clouds.visible) {
+      this.clouds.position.x += dt * (this.cloudDrift || 1.3);
+      if (this.clouds.position.x > 120) this.clouds.position.x = -120;
+    }
     const mins = Math.floor((this.time / 24000) * 24 * 60), hh = String(Math.floor(mins / 60) % 24).padStart(2, "0"), mm = String(mins % 60).padStart(2, "0"); this.ui.clock.textContent = `${hh}:${mm}`;
+  this.sun.target.position.set(this.p.pos.x, this.p.pos.y, this.p.pos.z);
+this.sun.target.updateMatrixWorld();
   }
   weatherUp(dt) {
     this.weather.timer -= dt;
@@ -3586,7 +4026,8 @@ class Game {
     const fall = this.weather.t === "storm" ? 35 : 24;
     const windX = this.weather.t === "storm" ? 3.2 : 1.6;
     const windZ = this.weather.t === "storm" ? 0.8 : 0.3;
-    for (let i = 0; i < this.rain.n; i++) {
+    const rainCount = clamp(Math.floor(this.rain.active ?? this.rain.n), 0, this.rain.n);
+    for (let i = 0; i < rainCount; i++) {
       let x = p.array[i * 3], y = p.array[i * 3 + 1], z = p.array[i * 3 + 2];
       x += windX * dt;
       z += windZ * dt;
@@ -3897,7 +4338,7 @@ class Game {
     this.rCraftInventory();
   }
   map() {
-    const c = this.ui.map.getContext("2d"), s = this.ui.map.width, r = this.perf.mapRadius, step = this.perf.mapStep, px = Math.floor(this.p.pos.x), pz = Math.floor(this.p.pos.z);
+    const c = this.ui.map.getContext("2d"), s = this.ui.map.width, r = this.mapRadius || this.perf.mapRadius, step = this.mapStep || this.perf.mapStep, px = Math.floor(this.p.pos.x), pz = Math.floor(this.p.pos.z);
     c.clearRect(0, 0, s, s);
     c.fillStyle = "rgba(8,12,20,0.75)";
     c.fillRect(0, 0, s, s);
@@ -3929,9 +4370,10 @@ class Game {
   pluginsUp(dt) { for (const p of this.plugins) if (typeof p.onFrame === "function") try { p.onFrame({ dt, game: this }, this); } catch (e) { console.error("Plugin error", e); } }
   loop(now) {
     const dt = clamp((now - this.last) / 1000, 0, 0.05); this.last = now; this.acc += dt;
-    this.loadCd -= dt; if (this.loadCd <= 0) { this.loadCd = this.perf.low ? 0.08 : 0.02; this.world.updateLoaded(this.p.pos); }
+    this.updateAdaptiveQuality(dt);
+    this.loadCd -= dt; if (this.loadCd <= 0) { this.loadCd = this.loadInterval || (this.perf.low ? 0.08 : 0.02); this.world.updateLoaded(this.p.pos); }
     this.skyUp(dt); this.weatherUp(dt); this.pMove(dt); this.interactUp(dt); this.itemsUp(dt); this.furnUp(dt); this.mobs.up(dt); this.pfx.up(dt); this.camUp(); this.hud();
-    this.mapCd -= dt; if (this.mapCd <= 0) { this.mapCd = this.perf.mapInterval; this.map(); }
+    this.mapCd -= dt; if (this.mapCd <= 0) { this.mapCd = this.mapInterval || this.perf.mapInterval; this.map(); }
     this.replayUp(dt); this.audio.up(dt);
     this.audio.setOccl(clamp((SEA - this.p.pos.y) / 25, 0, 1));
     while (this.acc >= 1 / 20) { this.tick(); this.acc -= 1 / 20; }
