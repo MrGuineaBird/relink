@@ -182,7 +182,6 @@
     <div class="channel-list" id="channelList"></div>
     <div class="channel-actions">
       <button class="btn" id="addChannelBtn">+ Channel</button>
-      <button class="btn danger" id="logoutBtn">Logout</button>
     </div>
   </div>
 
@@ -419,7 +418,7 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-document.getElementById('logoutBtn').onclick = logout;
+
 
 // ── Profile bar ────────────────────────────────────────────────────
 function updateProfileBar() {
@@ -633,9 +632,14 @@ function showCtxMenu(e, serverId, serverData) {
   ctxMenu.classList.add('open');
 }
 
-document.addEventListener('click', () => ctxMenu.classList.remove('open'));
-document.addEventListener('contextmenu', e => {
+document.addEventListener('click', e => {
   if (!e.target.closest('#ctxMenu')) ctxMenu.classList.remove('open');
+});
+document.addEventListener('contextmenu', e => {
+  // Only close if right-clicking outside both the menu AND a server button
+  if (!e.target.closest('#ctxMenu') && !e.target.closest('.server-btn')) {
+    ctxMenu.classList.remove('open');
+  }
 });
 
 document.getElementById('ctxEdit').addEventListener('click', () => {
