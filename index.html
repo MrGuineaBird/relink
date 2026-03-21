@@ -113,6 +113,21 @@
 
     /* Server btn with avatar image */
     .server-btn img { width:100%; height:100%; object-fit:cover; border-radius:14px }
+
+    /* Right-click context menu */
+    .ctx-menu { display:none; position:fixed; background:var(--panel); border-radius:8px; padding:6px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.5); z-index:200; border:1px solid rgba(255,255,255,0.07) }
+    .ctx-menu.open { display:block }
+    .ctx-item { padding:8px 12px; border-radius:6px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px; color:var(--text); transition:background .15s }
+    .ctx-item:hover { background:var(--accent) }
+    .ctx-item.danger { color:#e07070 }
+    .ctx-item.danger:hover { background:#7c2d2d; color:#fff }
+    .ctx-divider { height:1px; background:rgba(255,255,255,0.07); margin:4px 0 }
+
+    /* Edit server modal */
+    #editServerModal .modal { width:380px }
+    #editServerModal .modal-actions { justify-content:space-between }
+    .btn-delete { padding:9px 16px; border-radius:8px; border:none; cursor:pointer; font-size:14px; background:#7c2d2d; color:#fff; transition:background .2s }
+    .btn-delete:hover { background:#993a3a }
   </style>
 </head>
 <body>
@@ -169,6 +184,42 @@
   </div>
 </div>
 
+
+<!-- Right-click context menu -->
+<div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-item" id="ctxEdit">✏️ Edit Server</div>
+  <div class="ctx-divider"></div>
+  <div class="ctx-item danger" id="ctxDelete">🗑️ Delete Server</div>
+</div>
+
+<!-- Edit Server Modal -->
+<div class="modal-overlay" id="editServerModal">
+  <div class="modal">
+    <button class="modal-close" id="editModalClose">×</button>
+    <h2>Edit Server</h2>
+    <div class="avatar-upload">
+      <div class="avatar-preview" id="editAvatarPreview" title="Click to change icon">
+        <span id="editAvatarPlaceholder">?</span>
+      </div>
+      <div class="avatar-upload-info">
+        <strong>Server Icon</strong><br>
+        <span id="editAvatarTrigger">Click to change</span><br>
+        PNG, JPG, GIF · Max 2 MB
+      </div>
+    </div>
+    <input type="file" id="editAvatarFileInput" accept="image/*" style="display:none">
+    <label for="editServerNameInput">Server Name</label>
+    <input type="text" id="editServerNameInput" placeholder="Server name" maxlength="48">
+    <div class="modal-error" id="editError"></div>
+    <div class="modal-actions">
+      <button class="btn-delete" id="editDeleteBtn">Delete Server</button>
+      <div style="display:flex;gap:10px">
+        <button class="modal-cancel" id="editCancel">Cancel</button>
+        <button class="modal-confirm" id="editConfirm">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Server Create/Join Modal -->
 <div class="modal-overlay" id="serverModal">
@@ -427,6 +478,123 @@ document.getElementById('joinConfirm').addEventListener('click', async () => {
 
 function createOrJoinServer() { openServerModal(); }
 
+// ── Context menu ───────────────────────────────────────────────────
+let ctxServerId = null;
+let ctxServerData = null;
+let editAvatarB64 = null; // null = unchanged, string = new image, 'REMOVE' = cleared
+
+const ctxMenu = document.getElementById('ctxMenu');
+
+function showCtxMenu(e, serverId, serverData) {
+  e.preventDefault();
+  ctxServerId = serverId;
+  ctxServerData = serverData;
+  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+  ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 100) + 'px';
+  ctxMenu.classList.add('open');
+}
+
+document.addEventListener('click', () => ctxMenu.classList.remove('open'));
+document.addEventListener('contextmenu', e => {
+  if (!e.target.closest('#ctxMenu')) ctxMenu.classList.remove('open');
+});
+
+document.getElementById('ctxEdit').addEventListener('click', () => {
+  if (!ctxServerId) return;
+  openEditModal(ctxServerId, ctxServerData);
+});
+
+document.getElementById('ctxDelete').addEventListener('click', async () => {
+  if (!ctxServerId) return;
+  if (!confirm(`Delete "${ctxServerData.name}"? This cannot be undone.`)) return;
+  // Delete all subcollections client-side isn't supported in Firestore SDK directly,
+  // so we just delete the server doc — messages will orphan but that's fine for now
+  await deleteDoc(doc(db, 'servers', ctxServerId));
+  if (currentServer === ctxServerId) {
+    currentServer = null;
+    serverHeader.textContent = 'No server';
+    channelList.innerHTML = '';
+    messagesBox.innerHTML = '';
+    inviteBadge.style.display = 'none';
+    stopListeners();
+  }
+  await loadMyServers();
+});
+
+// ── Edit server modal ──────────────────────────────────────────────
+
+function openEditModal(serverId, serverData) {
+  editAvatarB64 = null;
+  document.getElementById('editServerNameInput').value = serverData.name;
+  document.getElementById('editError').textContent = '';
+  const prev = document.getElementById('editAvatarPreview');
+  if (serverData.icon) {
+    prev.innerHTML = `<img src="${serverData.icon}" alt="icon">`;
+  } else {
+    prev.innerHTML = `<span>${serverData.name[0].toUpperCase()}</span>`;
+  }
+  document.getElementById('editServerModal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('editServerModal').classList.remove('open');
+  editAvatarB64 = null;
+}
+
+document.getElementById('editModalClose').addEventListener('click', closeEditModal);
+document.getElementById('editCancel').addEventListener('click', closeEditModal);
+document.getElementById('editServerModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('editServerModal')) closeEditModal();
+});
+
+document.getElementById('editAvatarPreview').addEventListener('click', () => document.getElementById('editAvatarFileInput').click());
+document.getElementById('editAvatarTrigger').addEventListener('click', () => document.getElementById('editAvatarFileInput').click());
+
+document.getElementById('editAvatarFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    document.getElementById('editError').textContent = 'Image too large — max 2 MB.';
+    return;
+  }
+  document.getElementById('editError').textContent = '';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    editAvatarB64 = ev.target.result;
+    document.getElementById('editAvatarPreview').innerHTML = `<img src="${editAvatarB64}" alt="icon">`;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('editConfirm').addEventListener('click', async () => {
+  const name = document.getElementById('editServerNameInput').value.trim();
+  if (!name) return (document.getElementById('editError').textContent = 'Server name cannot be empty.');
+  const updates = { name };
+  if (editAvatarB64) updates.icon = editAvatarB64;
+  await updateDoc(doc(db, 'servers', ctxServerId), updates);
+  // Refresh header if this is the current server
+  if (currentServer === ctxServerId) {
+    serverHeader.textContent = name;
+  }
+  closeEditModal();
+  await loadMyServers();
+});
+
+document.getElementById('editDeleteBtn').addEventListener('click', async () => {
+  if (!confirm(`Delete "${ctxServerData?.name}"? This cannot be undone.`)) return;
+  closeEditModal();
+  await deleteDoc(doc(db, 'servers', ctxServerId));
+  if (currentServer === ctxServerId) {
+    currentServer = null;
+    serverHeader.textContent = 'No server';
+    channelList.innerHTML = '';
+    messagesBox.innerHTML = '';
+    inviteBadge.style.display = 'none';
+    stopListeners();
+  }
+  await loadMyServers();
+});
+
 async function loadMyServers() {
   if (!currentUser) return;
   const snap = await getDocs(query(collection(db, 'servers'), where('members', 'array-contains', currentUser.uid)));
@@ -452,6 +620,10 @@ async function loadMyServers() {
       btn.textContent = s.name[0].toUpperCase();
     }
     btn.onclick = () => selectServer(d.id);
+    // Right-click only for owner
+    if (s.ownerUid === currentUser.uid) {
+      btn.addEventListener('contextmenu', e => showCtxMenu(e, d.id, s));
+    }
     col.appendChild(btn);
   });
 
