@@ -114,6 +114,22 @@
     /* Server btn with avatar image */
     .server-btn img { width:100%; height:100%; object-fit:cover; border-radius:14px; pointer-events:none; user-select:none }
 
+    /* Profile bar at bottom of sidebar */
+    .profile-bar { margin-top:auto; width:100%; display:flex; flex-direction:column; align-items:center; padding:8px 0 10px; gap:6px; border-top:1px solid rgba(255,255,255,0.06) }
+    .profile-avatar { width:38px; height:38px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; overflow:hidden; flex-shrink:0; cursor:pointer }
+    .profile-avatar img { width:100%; height:100%; object-fit:cover; pointer-events:none; user-select:none }
+    .profile-settings-btn { width:30px; height:30px; border-radius:8px; background:none; border:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; transition:background .2s, color .2s }
+    .profile-settings-btn:hover { background:var(--panel); color:var(--text) }
+
+    /* User profile modal */
+    #profileModal .modal { width:400px }
+    #profileModal .profile-preview-row { display:flex; align-items:center; gap:16px; margin-bottom:20px }
+    #profileModal .profile-big-avatar { width:80px; height:80px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:700; overflow:hidden; flex-shrink:0; cursor:pointer; border:3px solid var(--panel); transition:border-color .2s }
+    #profileModal .profile-big-avatar:hover { border-color:var(--accent) }
+    #profileModal .profile-big-avatar img { width:100%; height:100%; object-fit:cover }
+    .profile-name-display { font-size:18px; font-weight:700 }
+    .profile-username-tag { font-size:12px; color:var(--text-muted); margin-top:2px }
+
     /* Right-click context menu */
     .ctx-menu { display:none; position:fixed; background:var(--panel); border-radius:8px; padding:6px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.5); z-index:200; border:1px solid rgba(255,255,255,0.07) }
     .ctx-menu.open { display:block }
@@ -152,6 +168,10 @@
   <div class="servers" id="serversCol">
     <div class="server-btn" id="homeBtn" title="Direct Messages">R</div>
     <div class="server-btn create" id="createServerBtn" title="Create or Join Server">+</div>
+    <div class="profile-bar">
+      <div class="profile-avatar" id="profileAvatarBtn" title="Your profile"></div>
+      <button class="profile-settings-btn" id="profileSettingsBtn" title="User Settings">⚙️</button>
+    </div>
   </div>
 
   <div class="server-panel" id="serverPanel">
@@ -178,12 +198,35 @@
   <div class="right">
     <div class="small">Online in channel</div>
     <ul id="onlineList"></ul>
-    <hr style="border:none;height:1px;background:#242629;margin:8px 0">
-    <div class="small">My Account</div>
-    <div id="myUsername" style="font-size:13px;margin-top:4px"></div>
   </div>
 </div>
 
+
+<!-- User Profile Modal -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal">
+    <button class="modal-close" id="profileModalClose">×</button>
+    <h2>User Settings</h2>
+    <div class="profile-preview-row">
+      <div class="profile-big-avatar" id="profileBigAvatar" title="Click to change avatar"></div>
+      <div>
+        <div class="profile-name-display" id="profileNameDisplay"></div>
+        <div class="profile-username-tag" id="profileUsernameTag"></div>
+      </div>
+    </div>
+    <input type="file" id="profileAvatarFileInput" accept="image/*" style="display:none">
+    <label for="profileDisplayNameInput">Display Name</label>
+    <input type="text" id="profileDisplayNameInput" placeholder="How others see you" maxlength="32">
+    <div class="modal-error" id="profileError"></div>
+    <div class="modal-actions" style="justify-content:space-between;align-items:center">
+      <button class="btn danger" id="profileLogoutBtn" style="padding:9px 16px;border-radius:8px;font-size:14px">Logout</button>
+      <div style="display:flex;gap:10px">
+        <button class="modal-cancel" id="profileCancel">Cancel</button>
+        <button class="modal-confirm" id="profileConfirm">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Right-click context menu -->
 <div class="ctx-menu" id="ctxMenu">
@@ -292,6 +335,8 @@ const db   = getFirestore(app);
 // ── State ──────────────────────────────────────────────────────────
 let currentUser    = null;
 let myUsername     = null;
+let myDisplayName  = null;
+let myAvatar       = null;
 let currentServer  = null;
 let currentChannel = null;
 let currentInvite  = null;
@@ -353,8 +398,11 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     currentUser = user;
     const snap = await getDoc(doc(db, 'users', user.uid));
-    myUsername = snap.exists() ? snap.data().username : user.email;
-    document.getElementById('myUsername').textContent = '@' + myUsername;
+    const data = snap.exists() ? snap.data() : {};
+    myUsername    = data.username    || user.email;
+    myDisplayName = data.displayName || myUsername;
+    myAvatar      = data.avatar      || null;
+    updateProfileBar();
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     await loadMyServers();
@@ -362,6 +410,8 @@ onAuthStateChanged(auth, async user => {
   } else {
     currentUser = null;
     myUsername  = null;
+    myDisplayName = null;
+    myAvatar = null;
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
     if (unsubMessages) { unsubMessages(); unsubMessages = null; }
@@ -370,6 +420,95 @@ onAuthStateChanged(auth, async user => {
 });
 
 document.getElementById('logoutBtn').onclick = logout;
+
+// ── Profile bar ────────────────────────────────────────────────────
+function updateProfileBar() {
+  const el = document.getElementById('profileAvatarBtn');
+  if (myAvatar) {
+    el.innerHTML = `<img src="${myAvatar}" alt="pfp">`;
+  } else {
+    const initials = (myDisplayName || myUsername || '?')[0].toUpperCase();
+    el.textContent = initials;
+    el.style.background = 'var(--accent)';
+  }
+}
+
+// ── Profile modal ──────────────────────────────────────────────────
+let profileAvatarPending = null;
+
+function openProfileModal() {
+  profileAvatarPending = null;
+  document.getElementById('profileDisplayNameInput').value = myDisplayName || '';
+  document.getElementById('profileError').textContent = '';
+  document.getElementById('profileNameDisplay').textContent = myDisplayName || myUsername;
+  document.getElementById('profileUsernameTag').textContent = '@' + myUsername;
+  const bigAvatar = document.getElementById('profileBigAvatar');
+  if (myAvatar) {
+    bigAvatar.innerHTML = `<img src="${myAvatar}" alt="pfp">`;
+  } else {
+    bigAvatar.textContent = (myDisplayName || myUsername || '?')[0].toUpperCase();
+  }
+  document.getElementById('profileModal').classList.add('open');
+}
+
+function closeProfileModal() {
+  document.getElementById('profileModal').classList.remove('open');
+  profileAvatarPending = null;
+}
+
+document.getElementById('profileAvatarBtn').addEventListener('click', openProfileModal);
+document.getElementById('profileSettingsBtn').addEventListener('click', openProfileModal);
+document.getElementById('profileModalClose').addEventListener('click', closeProfileModal);
+document.getElementById('profileCancel').addEventListener('click', closeProfileModal);
+document.getElementById('profileModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('profileModal')) closeProfileModal();
+});
+
+document.getElementById('profileLogoutBtn').addEventListener('click', async () => {
+  closeProfileModal();
+  await logout();
+});
+
+// Avatar click inside modal
+document.getElementById('profileBigAvatar').addEventListener('click', () => {
+  document.getElementById('profileAvatarFileInput').click();
+});
+
+document.getElementById('profileAvatarFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    document.getElementById('profileError').textContent = 'Image too large — max 2 MB.';
+    return;
+  }
+  document.getElementById('profileError').textContent = '';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    profileAvatarPending = ev.target.result;
+    document.getElementById('profileBigAvatar').innerHTML = `<img src="${profileAvatarPending}" alt="pfp">`;
+    // live-update preview name
+    document.getElementById('profileNameDisplay').textContent =
+      document.getElementById('profileDisplayNameInput').value.trim() || myDisplayName;
+  };
+  reader.readAsDataURL(file);
+});
+
+// Live preview display name as you type
+document.getElementById('profileDisplayNameInput').addEventListener('input', e => {
+  document.getElementById('profileNameDisplay').textContent = e.target.value.trim() || myUsername;
+});
+
+document.getElementById('profileConfirm').addEventListener('click', async () => {
+  const displayName = document.getElementById('profileDisplayNameInput').value.trim();
+  if (!displayName) return (document.getElementById('profileError').textContent = 'Display name cannot be empty.');
+  const updates = { displayName };
+  if (profileAvatarPending) updates.avatar = profileAvatarPending;
+  await updateDoc(doc(db, 'users', currentUser.uid), updates);
+  myDisplayName = displayName;
+  if (profileAvatarPending) myAvatar = profileAvatarPending;
+  updateProfileBar();
+  closeProfileModal();
+});
 
 
 // ══════════════════════════════════════════════════════════════════
