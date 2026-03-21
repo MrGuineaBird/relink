@@ -78,6 +78,41 @@
     /* Invite badge */
     .invite-badge { font-size:11px; background:var(--panel); padding:2px 6px; border-radius:4px; color:var(--text-muted); cursor:pointer; margin-left:4px }
     .invite-badge:hover { background:var(--accent) }
+
+    /* Modal overlay */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center }
+    .modal-overlay.open { display:flex }
+    .modal { background:var(--muted); border-radius:14px; padding:32px; width:360px; box-shadow:0 8px 40px rgba(0,0,0,0.5); position:relative }
+    .modal h2 { margin:0 0 20px 0; font-size:18px }
+    .modal-tabs { display:flex; gap:8px; margin-bottom:24px }
+    .modal-tab { flex:1; padding:8px; border-radius:8px; border:none; background:var(--panel); color:var(--text-muted); cursor:pointer; font-size:13px; transition:background .2s }
+    .modal-tab.active { background:var(--accent); color:#fff; font-weight:600 }
+    .modal-section { display:none }
+    .modal-section.active { display:block }
+    .modal label { display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px }
+    .modal input[type=text] { display:block; width:100%; padding:10px; border-radius:8px; border:none; background:#0b0c0d; color:var(--text); box-sizing:border-box; margin-bottom:16px; font-size:14px }
+    .modal input[type=text]:focus { outline:2px solid var(--accent) }
+
+    /* Avatar upload area */
+    .avatar-upload { display:flex; align-items:center; gap:16px; margin-bottom:20px }
+    .avatar-preview { width:72px; height:72px; border-radius:16px; background:var(--panel); display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:700; color:var(--text-muted); overflow:hidden; flex-shrink:0; cursor:pointer; border:2px dashed #444; transition:border-color .2s }
+    .avatar-preview:hover { border-color:var(--accent) }
+    .avatar-preview img { width:100%; height:100%; object-fit:cover }
+    .avatar-upload-info { font-size:12px; color:var(--text-muted); line-height:1.6 }
+    .avatar-upload-info span { color:var(--accent); cursor:pointer }
+    .avatar-upload-info span:hover { text-decoration:underline }
+    .modal-error { color:#e07070; font-size:12px; margin-bottom:12px; min-height:16px }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end }
+    .modal-actions button { padding:9px 20px; border-radius:8px; border:none; cursor:pointer; font-size:14px; transition:background .2s }
+    .modal-cancel { background:var(--panel); color:var(--text-muted) }
+    .modal-cancel:hover { background:#2e3d52 }
+    .modal-confirm { background:var(--accent); color:#fff; font-weight:600 }
+    .modal-confirm:hover { background:var(--accent-hover) }
+    .modal-close { position:absolute; top:14px; right:16px; background:none; border:none; color:var(--text-muted); font-size:20px; cursor:pointer; line-height:1 }
+    .modal-close:hover { color:var(--text) }
+
+    /* Server btn with avatar image */
+    .server-btn img { width:100%; height:100%; object-fit:cover; border-radius:14px }
   </style>
 </head>
 <body>
@@ -134,6 +169,51 @@
   </div>
 </div>
 
+
+<!-- Server Create/Join Modal -->
+<div class="modal-overlay" id="serverModal">
+  <div class="modal">
+    <button class="modal-close" id="modalClose">×</button>
+    <h2 id="modalTitle">Add a Server</h2>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tabCreate">Create New</button>
+      <button class="modal-tab" id="tabJoin">Join with Code</button>
+    </div>
+
+    <!-- Create section -->
+    <div class="modal-section active" id="sectionCreate">
+      <div class="avatar-upload">
+        <div class="avatar-preview" id="avatarPreview" title="Click to upload image">
+          <span id="avatarPlaceholder">?</span>
+        </div>
+        <div class="avatar-upload-info">
+          <strong>Server Icon</strong><br>
+          <span id="avatarUploadTrigger">Click to upload</span><br>
+          PNG, JPG, GIF · Max 2 MB
+        </div>
+      </div>
+      <input type="file" id="avatarFileInput" accept="image/*" style="display:none">
+      <label for="serverNameInput">Server Name</label>
+      <input type="text" id="serverNameInput" placeholder="My Awesome Server" maxlength="48">
+      <div class="modal-error" id="createError"></div>
+      <div class="modal-actions">
+        <button class="modal-cancel" id="createCancel">Cancel</button>
+        <button class="modal-confirm" id="createConfirm">Create Server</button>
+      </div>
+    </div>
+
+    <!-- Join section -->
+    <div class="modal-section" id="sectionJoin">
+      <label for="inviteCodeInput">Invite Code</label>
+      <input type="text" id="inviteCodeInput" placeholder="e.g. A3BX92KQ" maxlength="16" style="text-transform:uppercase">
+      <div class="modal-error" id="joinError"></div>
+      <div class="modal-actions">
+        <button class="modal-cancel" id="joinCancel">Cancel</button>
+        <button class="modal-confirm" id="joinConfirm">Join Server</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import { initializeApp }                              from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
@@ -247,46 +327,105 @@ document.getElementById('logoutBtn').onclick = logout;
 
 function randomInvite() { return Math.random().toString(36).slice(2, 10).toUpperCase(); }
 
-async function createOrJoinServer() {
-  if (confirm('Click OK to Create a new server, or Cancel to Join with an invite code.')) {
-    await createServer();
-  } else {
-    await joinByInvite();
-  }
+// ── Modal state ────────────────────────────────────────────────────
+let pendingAvatarB64 = null;
+
+function openServerModal() {
+  pendingAvatarB64 = null;
+  document.getElementById('avatarPreview').innerHTML = '<span id="avatarPlaceholder">?</span>';
+  document.getElementById('serverNameInput').value = '';
+  document.getElementById('inviteCodeInput').value = '';
+  document.getElementById('createError').textContent = '';
+  document.getElementById('joinError').textContent = '';
+  switchModalTab('create');
+  document.getElementById('serverModal').classList.add('open');
 }
 
-async function createServer() {
-  const name = prompt('Server name:');
-  if (!name) return;
+function closeServerModal() {
+  document.getElementById('serverModal').classList.remove('open');
+  pendingAvatarB64 = null;
+}
+
+function switchModalTab(tab) {
+  document.getElementById('tabCreate').classList.toggle('active', tab === 'create');
+  document.getElementById('tabJoin').classList.toggle('active', tab === 'join');
+  document.getElementById('sectionCreate').classList.toggle('active', tab === 'create');
+  document.getElementById('sectionJoin').classList.toggle('active', tab === 'join');
+}
+
+// Avatar upload
+document.getElementById('avatarPreview').addEventListener('click', () => document.getElementById('avatarFileInput').click());
+document.getElementById('avatarUploadTrigger').addEventListener('click', () => document.getElementById('avatarFileInput').click());
+document.getElementById('avatarFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    document.getElementById('createError').textContent = 'Image too large — max 2 MB.';
+    return;
+  }
+  document.getElementById('createError').textContent = '';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    pendingAvatarB64 = ev.target.result; // full data URL
+    const preview = document.getElementById('avatarPreview');
+    preview.innerHTML = `<img src="${pendingAvatarB64}" alt="avatar">`;
+  };
+  reader.readAsDataURL(file);
+});
+
+// Tab switching
+document.getElementById('tabCreate').addEventListener('click', () => switchModalTab('create'));
+document.getElementById('tabJoin').addEventListener('click', () => switchModalTab('join'));
+
+// Close buttons
+document.getElementById('modalClose').addEventListener('click', closeServerModal);
+document.getElementById('createCancel').addEventListener('click', closeServerModal);
+document.getElementById('joinCancel').addEventListener('click', closeServerModal);
+
+// Close on overlay click
+document.getElementById('serverModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('serverModal')) closeServerModal();
+});
+
+// Create server confirm
+document.getElementById('createConfirm').addEventListener('click', async () => {
+  const name = document.getElementById('serverNameInput').value.trim();
+  if (!name) return (document.getElementById('createError').textContent = 'Please enter a server name.');
   const invite = randomInvite();
   const ref = await addDoc(collection(db, 'servers'), {
     name, invite,
+    icon: pendingAvatarB64 || null,
     ownerUid: currentUser.uid,
     members: [currentUser.uid],
     createdAt: serverTimestamp()
   });
-  alert(`Server created!\nInvite code: ${invite}\n(Share this with friends to join)`);
+  closeServerModal();
   await loadMyServers();
   selectServer(ref.id);
-}
+  // Show invite in a nicer way
+  setTimeout(() => alert(`Server "${name}" created!\nInvite code: ${invite}`), 100);
+});
 
-async function joinByInvite() {
-  const code = prompt('Paste invite code:');
-  if (!code) return;
-  const snap = await getDocs(query(collection(db, 'servers'), where('invite', '==', code.trim().toUpperCase())));
-  if (snap.empty) return alert('Invite code not found.');
+// Join server confirm
+document.getElementById('joinConfirm').addEventListener('click', async () => {
+  const code = document.getElementById('inviteCodeInput').value.trim().toUpperCase();
+  if (!code) return (document.getElementById('joinError').textContent = 'Please enter an invite code.');
+  const snap = await getDocs(query(collection(db, 'servers'), where('invite', '==', code)));
+  if (snap.empty) return (document.getElementById('joinError').textContent = 'Invite code not found.');
   const serverDoc = snap.docs[0];
   const data = serverDoc.data();
   if (data.members.includes(currentUser.uid)) {
-    alert('You are already in this server!');
+    closeServerModal();
     selectServer(serverDoc.id);
     return;
   }
   await updateDoc(doc(db, 'servers', serverDoc.id), { members: arrayUnion(currentUser.uid) });
-  alert('Joined server: ' + data.name);
+  closeServerModal();
   await loadMyServers();
   selectServer(serverDoc.id);
-}
+});
+
+function createOrJoinServer() { openServerModal(); }
 
 async function loadMyServers() {
   if (!currentUser) return;
@@ -306,8 +445,12 @@ async function loadMyServers() {
     const s = d.data();
     const btn = document.createElement('div');
     btn.className = 'server-btn' + (d.id === currentServer ? ' active' : '');
-    btn.textContent = s.name[0].toUpperCase();
     btn.title = s.name;
+    if (s.icon) {
+      btn.innerHTML = `<img src="${s.icon}" alt="${s.name}">`;
+    } else {
+      btn.textContent = s.name[0].toUpperCase();
+    }
     btn.onclick = () => selectServer(d.id);
     col.appendChild(btn);
   });
