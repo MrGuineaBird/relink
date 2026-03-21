@@ -48,9 +48,16 @@
     .chat { flex:1; display:flex; flex-direction:column }
     .chat-header { background:var(--panel); padding:12px; border-bottom:1px solid #242629; font-weight:700 }
     .messages { flex:1; padding:16px; overflow:auto; background:var(--bg) }
-    .message { margin-bottom:12px; padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03) }
-    .message.self { background:rgba(45,74,124,0.3); text-align:right }
-    .message .meta { font-size:12px; color:var(--text-muted); margin-bottom:4px }
+
+    /* Messages */
+    .message { display:flex; gap:12px; margin-bottom:16px; align-items:flex-start }
+    .msg-avatar { width:38px; height:38px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; flex-shrink:0; overflow:hidden }
+    .msg-avatar img { width:100%; height:100%; object-fit:cover }
+    .msg-body { flex:1; min-width:0 }
+    .msg-meta { display:flex; align-items:baseline; gap:8px; margin-bottom:3px }
+    .msg-name { font-weight:600; font-size:14px; color:var(--text) }
+    .msg-time { font-size:11px; color:var(--text-muted) }
+    .msg-text { font-size:14px; color:var(--text); word-break:break-word; line-height:1.5 }
 
     /* Input composer */
     .composer { display:flex; padding:12px; background:var(--panel); gap:8px; border-top:1px solid #242629 }
@@ -870,17 +877,41 @@ function joinChannel(ch) {
 }
 
 function appendMessage(m) {
-  const isSelf = m.uid === currentUser?.uid;
-  const div  = document.createElement('div');
-  div.className = 'message' + (isSelf ? ' self' : '');
+  const div = document.createElement('div');
+  div.className = 'message';
+
+  // Avatar
+  const av = document.createElement('div');
+  av.className = 'msg-avatar';
+  if (m.avatar) {
+    av.innerHTML = `<img src="${m.avatar}" alt="">`;
+  } else {
+    av.textContent = (m.displayName || m.username || '?')[0].toUpperCase();
+  }
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+
   const meta = document.createElement('div');
-  meta.className = 'meta';
-  const ts = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
-  meta.textContent = `${m.username} • ${ts}`;
+  meta.className = 'msg-meta';
+  const name = document.createElement('span');
+  name.className = 'msg-name';
+  name.textContent = m.displayName || m.username;
+  const time = document.createElement('span');
+  time.className = 'msg-time';
+  time.textContent = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
+  meta.appendChild(name);
+  meta.appendChild(time);
+
   const txt = document.createElement('div');
+  txt.className = 'msg-text';
   txt.textContent = m.text;
-  div.appendChild(meta);
-  div.appendChild(txt);
+
+  body.appendChild(meta);
+  body.appendChild(txt);
+  div.appendChild(av);
+  div.appendChild(body);
   messagesBox.appendChild(div);
 }
 
@@ -898,7 +929,12 @@ async function sendMessage() {
   if (!currentServer || !currentChannel) return alert('Join a channel first.');
 
   await addDoc(collection(db, 'servers', currentServer, 'channels', currentChannel, 'messages'), {
-    text, username: myUsername, uid: currentUser.uid, ts: serverTimestamp()
+    text,
+    username: myUsername,
+    displayName: myDisplayName || myUsername,
+    avatar: myAvatar || null,
+    uid: currentUser.uid,
+    ts: serverTimestamp()
   });
 }
 
@@ -1027,7 +1063,10 @@ function openDM(uid, username) {
 async function sendDM(text) {
   const id = dmId(currentUser.uid, currentDMUid);
   await addDoc(collection(db, 'dms', id, 'messages'), {
-    from: myUsername, fromUid: currentUser.uid,
+    from: myUsername,
+    fromDisplayName: myDisplayName || myUsername,
+    fromAvatar: myAvatar || null,
+    fromUid: currentUser.uid,
     to: currentDMName, toUid: currentDMUid,
     text, ts: serverTimestamp()
   });
@@ -1036,17 +1075,39 @@ async function sendDM(text) {
 }
 
 function appendDM(m) {
-  const isSelf = m.fromUid === currentUser?.uid;
-  const div  = document.createElement('div');
-  div.className = 'message' + (isSelf ? ' self' : '');
+  const div = document.createElement('div');
+  div.className = 'message';
+
+  const av = document.createElement('div');
+  av.className = 'msg-avatar';
+  if (m.fromAvatar) {
+    av.innerHTML = `<img src="${m.fromAvatar}" alt="">`;
+  } else {
+    av.textContent = (m.fromDisplayName || m.from || '?')[0].toUpperCase();
+  }
+
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+
   const meta = document.createElement('div');
-  meta.className = 'meta';
-  const ts = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
-  meta.textContent = `${m.from} • ${ts}`;
+  meta.className = 'msg-meta';
+  const name = document.createElement('span');
+  name.className = 'msg-name';
+  name.textContent = m.fromDisplayName || m.from;
+  const time = document.createElement('span');
+  time.className = 'msg-time';
+  time.textContent = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
+  meta.appendChild(name);
+  meta.appendChild(time);
+
   const txt = document.createElement('div');
+  txt.className = 'msg-text';
   txt.textContent = m.text;
-  div.appendChild(meta);
-  div.appendChild(txt);
+
+  body.appendChild(meta);
+  body.appendChild(txt);
+  div.appendChild(av);
+  div.appendChild(body);
   messagesBox.appendChild(div);
 }
 </script>
