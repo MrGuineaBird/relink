@@ -191,6 +191,34 @@
     .profile-name-display { font-size:18px; font-weight:700 }
     .profile-username-tag { font-size:12px; color:var(--text-muted); margin-top:2px }
 
+    /* Voice channels */
+    .channel-section-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); padding:12px 10px 4px; display:flex; justify-content:space-between; align-items:center }
+    .channel-section-label button { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:16px; line-height:1; padding:0 2px }
+    .channel-section-label button:hover { color:var(--text) }
+    .vc-item { padding:7px 10px; border-radius:6px; cursor:pointer; color:var(--text-muted); transition:background .2s; display:flex; align-items:center; gap:8px; font-size:14px }
+    .vc-item:hover { background:rgba(255,255,255,0.08); color:var(--text) }
+    .vc-item.active { background:rgba(59,165,92,0.15); color:#3ba55c }
+    .vc-item-icon { font-size:15px; flex-shrink:0 }
+    .vc-participants { padding:2px 10px 4px 28px; display:flex; flex-direction:column; gap:3px }
+    .vc-participant { font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px }
+    .vc-participant-avatar { width:20px; height:20px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; overflow:hidden; flex-shrink:0 }
+    .vc-participant-avatar img { width:100%; height:100%; object-fit:cover }
+    .vc-participant.speaking { color:var(--text) }
+    .vc-participant.speaking .vc-participant-avatar { box-shadow:0 0 0 2px #3ba55c }
+
+    /* VC active bar (bottom of sidebar) */
+    .vc-active-bar { background:#1a2a1a; border-top:1px solid #2d4a2d; padding:8px 10px; font-size:12px; display:none }
+    .vc-active-bar.visible { display:block }
+    .vc-active-bar-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px }
+    .vc-active-bar-name { color:#3ba55c; font-weight:600; font-size:13px }
+    .vc-active-bar-server { color:var(--text-muted); font-size:11px }
+    .vc-controls { display:flex; gap:6px; margin-top:6px }
+    .vc-ctrl-btn { flex:1; padding:5px; border-radius:6px; border:none; background:rgba(255,255,255,0.07); color:var(--text); cursor:pointer; font-size:13px; transition:background .2s }
+    .vc-ctrl-btn:hover { background:rgba(255,255,255,0.14) }
+    .vc-ctrl-btn.active { background:#3ba55c; color:#fff }
+    .vc-ctrl-btn.leave { background:#7c2d2d; color:#fff }
+    .vc-ctrl-btn.leave:hover { background:#993a3a }
+
     /* Right-click context menu */
     .ctx-menu { display:none; position:fixed; background:var(--panel); border-radius:8px; padding:6px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.5); z-index:200; border:1px solid rgba(255,255,255,0.07) }
     .ctx-menu.open { display:block }
@@ -267,8 +295,21 @@
       <span id="inviteBadge" class="invite-badge" title="Copy invite code" style="display:none">📋 invite</span>
     </div>
     <div class="channel-list" id="channelList"></div>
+    <div class="vc-active-bar" id="vcActiveBar">
+      <div class="vc-active-bar-top">
+        <div>
+          <div class="vc-active-bar-name" id="vcActiveBarName">🔊 Voice Connected</div>
+          <div class="vc-active-bar-server" id="vcActiveBarServer"></div>
+        </div>
+      </div>
+      <div class="vc-controls">
+        <button class="vc-ctrl-btn" id="vcMuteBtn" title="Mute">🎤 Mute</button>
+        <button class="vc-ctrl-btn leave" id="vcLeaveBtn">📴 Leave</button>
+      </div>
+    </div>
     <div class="channel-actions">
-      <button class="btn" id="addChannelBtn">+ Channel</button>
+      <button class="btn" id="addChannelBtn">+ Text</button>
+      <button class="btn" id="addVcBtn" style="background:#2a4a2a">+ Voice</button>
     </div>
   </div>
 
@@ -922,17 +963,35 @@ async function selectServer(serverId) {
   messagesBox.innerHTML = '';
   onlineList.innerHTML  = '';
   document.getElementById('addChannelBtn').style.display = 'inline-block';
+  document.getElementById('addVcBtn').style.display = 'inline-block';
 
   const chSnap = await getDocs(query(collection(db, 'servers', serverId, 'channels'), orderBy('createdAt')));
 
   if (chSnap.empty) {
-    await setDoc(doc(db, 'servers', serverId, 'channels', 'general'), { name: 'general', createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'servers', serverId, 'channels', 'general'), { name: 'general', type: 'text', createdAt: serverTimestamp() });
     selectServer(serverId);
     return;
   }
 
-  chSnap.docs.forEach(d => addChannelItem(d.data().name));
-  joinChannel(chSnap.docs[0].data().name);
+  // Section: Text Channels
+  const textLabel = document.createElement('div');
+  textLabel.className = 'channel-section-label';
+  textLabel.innerHTML = '<span>Text Channels</span>';
+  channelList.appendChild(textLabel);
+
+  const textChannels = chSnap.docs.filter(d => d.data().type !== 'voice');
+  textChannels.forEach(d => addChannelItem(d.data().name));
+
+  // Section: Voice Channels
+  const vcLabel = document.createElement('div');
+  vcLabel.className = 'channel-section-label';
+  vcLabel.innerHTML = '<span>Voice Channels</span>';
+  channelList.appendChild(vcLabel);
+
+  const vcChannels = chSnap.docs.filter(d => d.data().type === 'voice');
+  vcChannels.forEach(d => addVcChannelItem(d.data().name));
+
+  if (textChannels.length) joinChannel(textChannels[0].data().name);
   loadMyServers();
 }
 
@@ -946,15 +1005,25 @@ function addChannelItem(name) {
 
 async function addChannel() {
   if (!currentServer) return alert('Select a server first.');
-  const name = prompt('Channel name (no #):');
+  const name = prompt('Text channel name (no #):');
   if (!name) return;
   const clean = name.trim().toLowerCase().replace(/\s+/g, '-');
-  await setDoc(doc(db, 'servers', currentServer, 'channels', clean), { name: clean, createdAt: serverTimestamp() });
+  await setDoc(doc(db, 'servers', currentServer, 'channels', clean), { name: clean, type: 'text', createdAt: serverTimestamp() });
   addChannelItem(clean);
   joinChannel(clean);
 }
 
+async function addVcChannel() {
+  if (!currentServer) return alert('Select a server first.');
+  const name = prompt('Voice channel name:');
+  if (!name) return;
+  const clean = 'vc-' + name.trim().toLowerCase().replace(/\s+/g, '-');
+  await setDoc(doc(db, 'servers', currentServer, 'channels', clean), { name: clean, type: 'voice', createdAt: serverTimestamp() });
+  addVcChannelItem(clean);
+}
+
 document.getElementById('addChannelBtn').onclick = addChannel;
+document.getElementById('addVcBtn').onclick = addVcChannel;
 document.getElementById('createServerBtn').onclick = createOrJoinServer;
 document.getElementById('homeBtn').onclick = loadDMList;
 
@@ -1360,6 +1429,208 @@ function appendDM(m) {
   div.appendChild(body);
   messagesBox.appendChild(div);
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  VOICE CHANNELS (WebRTC + Firestore signaling)
+// ══════════════════════════════════════════════════════════════════
+
+let currentVcChannel = null;
+let localStream      = null;
+let isMuted          = false;
+const peerConnections = {}; // uid → RTCPeerConnection
+let vcParticipantsUnsub = null;
+
+const ICE_SERVERS = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+]};
+
+function addVcChannelItem(name) {
+  const el = document.createElement('div');
+  el.className = 'vc-item' + (name === currentVcChannel ? ' active' : '');
+  el.innerHTML = `<span class="vc-item-icon">🔊</span><span>${name.replace(/^vc-/, '')}</span>`;
+  el.dataset.vcName = name;
+  el.onclick = () => joinVoiceChannel(name);
+  channelList.appendChild(el);
+
+  // Participant list under this VC item
+  const partEl = document.createElement('div');
+  partEl.className = 'vc-participants';
+  partEl.id = 'vc-parts-' + name;
+  channelList.appendChild(partEl);
+
+  // Listen for participants in this VC
+  onSnapshot(collection(db, 'servers', currentServer, 'vc', name, 'participants'), snap => {
+    partEl.innerHTML = '';
+    snap.docs.forEach(d => {
+      const p = d.data();
+      const row = document.createElement('div');
+      row.className = 'vc-participant';
+      const av = document.createElement('div');
+      av.className = 'vc-participant-avatar';
+      if (p.avatar) av.innerHTML = `<img src="${p.avatar}">`;
+      else av.textContent = (p.displayName || p.username || '?')[0].toUpperCase();
+      const nm = document.createElement('span');
+      nm.textContent = p.displayName || p.username;
+      row.appendChild(av);
+      row.appendChild(nm);
+      partEl.appendChild(row);
+    });
+  });
+}
+
+async function joinVoiceChannel(name) {
+  if (currentVcChannel === name) return; // already in it
+  if (currentVcChannel) await leaveVoiceChannel(); // leave current first
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    alert('Could not access microphone: ' + e.message);
+    return;
+  }
+
+  currentVcChannel = name;
+
+  // Mark ourselves as present
+  await setDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid), {
+    uid: currentUser.uid,
+    username: myUsername,
+    displayName: myDisplayName || myUsername,
+    avatar: myAvatar || null,
+    joinedAt: serverTimestamp()
+  });
+
+  // Highlight VC item
+  document.querySelectorAll('.vc-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.vcName === name);
+  });
+
+  // Show active bar
+  const bar = document.getElementById('vcActiveBar');
+  bar.classList.add('visible');
+  document.getElementById('vcActiveBarName').textContent = '🔊 ' + name.replace(/^vc-/, '');
+  document.getElementById('vcActiveBarServer').textContent = serverHeader.textContent;
+
+  // Connect to existing participants
+  const snap = await getDocs(collection(db, 'servers', currentServer, 'vc', name, 'participants'));
+  for (const d of snap.docs) {
+    if (d.id !== currentUser.uid) {
+      await callPeer(d.id, name);
+    }
+  }
+
+  // Listen for incoming offers/ICE from others
+  onSnapshot(collection(db, 'servers', currentServer, 'vc', name, 'signals', currentUser.uid, 'inbox'), async snap => {
+    for (const change of snap.docChanges()) {
+      if (change.type !== 'added') continue;
+      const sig = change.doc.data();
+      if (sig.type === 'offer') await handleOffer(sig, name);
+      if (sig.type === 'answer') await handleAnswer(sig);
+      if (sig.type === 'ice') await handleIce(sig);
+      await deleteDoc(change.doc.ref);
+    }
+  });
+}
+
+async function callPeer(remoteUid, vcName) {
+  const pc = createPC(remoteUid);
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  // Send offer to remote peer's inbox
+  await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', remoteUid, 'inbox'), {
+    type: 'offer', from: currentUser.uid, sdp: offer.sdp
+  });
+}
+
+async function handleOffer(sig, vcName) {
+  const pc = createPC(sig.from);
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sig.sdp }));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', sig.from, 'inbox'), {
+    type: 'answer', from: currentUser.uid, sdp: answer.sdp
+  });
+}
+
+async function handleAnswer(sig) {
+  const pc = peerConnections[sig.from];
+  if (pc) await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sig.sdp }));
+}
+
+async function handleIce(sig) {
+  const pc = peerConnections[sig.from];
+  if (pc && sig.candidate) {
+    try { await pc.addIceCandidate(new RTCIceCandidate(sig.candidate)); } catch (_) {}
+  }
+}
+
+function createPC(remoteUid) {
+  if (peerConnections[remoteUid]) peerConnections[remoteUid].close();
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  peerConnections[remoteUid] = pc;
+
+  pc.onicecandidate = async e => {
+    if (e.candidate && currentVcChannel) {
+      await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', remoteUid, 'inbox'), {
+        type: 'ice', from: currentUser.uid, candidate: e.candidate.toJSON()
+      });
+    }
+  };
+
+  pc.ontrack = e => {
+    const audio = document.getElementById('vc-audio-' + remoteUid) || document.createElement('audio');
+    audio.id = 'vc-audio-' + remoteUid;
+    audio.autoplay = true;
+    audio.srcObject = e.streams[0];
+    if (!document.getElementById(audio.id)) document.body.appendChild(audio);
+  };
+
+  return pc;
+}
+
+async function leaveVoiceChannel() {
+  if (!currentVcChannel) return;
+  const name = currentVcChannel;
+  currentVcChannel = null;
+
+  // Remove from participants
+  try { await deleteDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid)); } catch (_) {}
+
+  // Close all peer connections
+  Object.values(peerConnections).forEach(pc => pc.close());
+  Object.keys(peerConnections).forEach(k => delete peerConnections[k]);
+
+  // Stop mic
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+
+  // Remove audio elements
+  document.querySelectorAll('[id^="vc-audio-"]').forEach(el => el.remove());
+
+  // Hide bar, de-highlight
+  document.getElementById('vcActiveBar').classList.remove('visible');
+  document.querySelectorAll('.vc-item').forEach(el => el.classList.remove('active'));
+
+  isMuted = false;
+  document.getElementById('vcMuteBtn').textContent = '🎤 Mute';
+  document.getElementById('vcMuteBtn').classList.remove('active');
+}
+
+document.getElementById('vcMuteBtn').addEventListener('click', () => {
+  if (!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  const btn = document.getElementById('vcMuteBtn');
+  btn.textContent = isMuted ? '🔇 Unmute' : '🎤 Mute';
+  btn.classList.toggle('active', isMuted);
+});
+
+document.getElementById('vcLeaveBtn').addEventListener('click', leaveVoiceChannel);
+
+// Leave VC when closing tab
+window.addEventListener('beforeunload', () => { leaveVoiceChannel(); clearPresence(); });
 </script>
 </body>
 </html>
