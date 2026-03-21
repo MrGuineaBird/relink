@@ -343,7 +343,7 @@ async function selectServer(serverId) {
   const chSnap = await getDocs(query(collection(db, 'servers', serverId, 'channels'), orderBy('createdAt')));
 
   if (chSnap.empty) {
-    await addDoc(collection(db, 'servers', serverId, 'channels'), { name: 'general', createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'servers', serverId, 'channels', 'general'), { name: 'general', createdAt: serverTimestamp() });
     selectServer(serverId);
     return;
   }
@@ -366,7 +366,7 @@ async function addChannel() {
   const name = prompt('Channel name (no #):');
   if (!name) return;
   const clean = name.trim().toLowerCase().replace(/\s+/g, '-');
-  await addDoc(collection(db, 'servers', currentServer, 'channels'), { name: clean, createdAt: serverTimestamp() });
+  await setDoc(doc(db, 'servers', currentServer, 'channels', clean), { name: clean, createdAt: serverTimestamp() });
   addChannelItem(clean);
   joinChannel(clean);
 }
