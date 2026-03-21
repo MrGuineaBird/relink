@@ -193,15 +193,11 @@ async function signup() {
   if (!u || !p) return (loginError.textContent = 'Enter a username and password.');
   if (!/^[a-zA-Z0-9_]{2,24}$/.test(u))
     return (loginError.textContent = 'Username: 2-24 chars, letters/numbers/_ only.');
-
-  const existing = await getDocs(query(collection(db, 'users'), where('username', '==', u)));
-  if (!existing.empty) return (loginError.textContent = 'Username already taken.');
-
   try {
     const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(u), p);
-    await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid });
+    try { await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid }); } catch (_) {}
   } catch (e) {
-    loginError.textContent = e.message;
+    loginError.textContent = e.code === 'auth/email-already-in-use' ? 'Username already taken.' : e.message;
   }
 }
 
