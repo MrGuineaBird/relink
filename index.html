@@ -1,1687 +1,606 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vapor — Your Game Store</title>
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg-deep: #0e0e12;
-    --bg-panel: #16161e;
-    --bg-card: #1e1e2a;
-    --bg-hover: #252535;
-    --accent: #4fa3e0;
-    --accent2: #7c5cbf;
-    --accent-glow: rgba(79,163,224,0.15);
-    --green: #5ba35c;
-    --red: #c0392b;
-    --gold: #d4a017;
-    --text-primary: #e8e8f0;
-    --text-secondary: #9090a8;
-    --text-muted: #55556a;
-    --border: rgba(255,255,255,0.07);
-    --border-accent: rgba(79,163,224,0.3);
-  }
+  <meta charset="utf-8" />
+  <title>RELINK</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0e1621;
+      --muted: #1b2838;
+      --panel: #22324a;
+      --accent: #2d4a7c;
+      --accent-hover: #3a5d99;
+      --text: #e0e6ed;
+      --text-muted: #9fb3d1;
+    }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+    html,body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, Segoe UI, Roboto, Arial;
+    }
+    .app { display:flex; height:100vh }
 
-  body {
-    font-family: 'Exo 2', sans-serif;
-    background: var(--bg-deep);
-    color: var(--text-primary);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+    /* Sidebar */
+    .servers { width:72px; background:var(--muted); display:flex; flex-direction:column; align-items:center; padding:10px; gap:8px }
+    .server-btn { width:48px; height:48px; border-radius:16px; background:var(--panel); display:flex; align-items:center; justify-content:center; font-weight:700; cursor:pointer; color:var(--text); transition:background .2s, transform .1s }
+    .server-btn:hover { background:var(--accent-hover); transform:scale(1.05) }
+    .server-btn.active { background:var(--accent); box-shadow:0 0 8px var(--accent) }
+    .server-btn.create { background:transparent; border:2px dashed #444 }
 
-  /* NAV */
-  nav {
-    background: rgba(14,14,18,0.96);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; z-index: 100;
-    padding: 0 2rem;
-    display: flex; align-items: center; gap: 0;
-    height: 52px;
-  }
+    /* Channels panel */
+    .server-panel { width:260px; background:var(--muted); display:flex; flex-direction:column }
+    .server-header { padding:12px; font-weight:700; border-bottom:1px solid #242629; display:flex; justify-content:space-between; align-items:center }
+    .channel-list { flex:1; overflow:auto; padding:6px }
+    .channel-item { padding:8px 10px; border-radius:6px; cursor:pointer; color:var(--text-muted); transition:background .2s }
+    .channel-item:hover { background:rgba(255,255,255,0.08) }
+    .channel-item.active { background:var(--accent); color:#fff; font-weight:600 }
+    .channel-actions { padding:8px; border-top:1px solid #242629; display:flex; gap:6px; flex-wrap:wrap }
+    .btn { background:var(--accent); border:none; color:white; padding:8px 10px; border-radius:6px; cursor:pointer; transition:background .2s; font-size:13px }
+    .btn:hover { background:var(--accent-hover) }
+    .btn.danger { background:#7c2d2d }
+    .btn.danger:hover { background:#993a3a }
 
-  .logo {
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 700;
-    font-size: 1.6rem;
-    letter-spacing: 3px;
-    color: var(--accent);
-    text-transform: uppercase;
-    margin-right: 2.5rem;
-  }
-  .logo span { color: var(--accent2); }
+    /* Chat */
+    .chat { flex:1; display:flex; flex-direction:column }
+    .chat-header { background:var(--panel); padding:12px; border-bottom:1px solid #242629; font-weight:700 }
+    .messages { flex:1; padding:16px; overflow:auto; background:var(--bg) }
+    .message { margin-bottom:12px; padding:6px 8px; border-radius:6px; background:rgba(255,255,255,0.03) }
+    .message.self { background:rgba(45,74,124,0.3); text-align:right }
+    .message .meta { font-size:12px; color:var(--text-muted); margin-bottom:4px }
 
-  .nav-links { display: flex; gap: 0; flex: 1; }
-  .nav-link {
-    padding: 0 1.1rem;
-    height: 52px;
-    display: flex; align-items: center;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    position: relative;
-  }
-  .nav-link:hover { color: var(--text-primary); }
-  .nav-link.active { color: var(--accent); border-bottom-color: var(--accent); }
+    /* Input composer */
+    .composer { display:flex; padding:12px; background:var(--panel); gap:8px; border-top:1px solid #242629 }
+    .input { flex:1; padding:10px; border-radius:8px; border:none; background:#0b0c0d; color:var(--text) }
+    #sendBtn { padding:0 16px; border-radius:6px; background:var(--accent); border:none; color:white; cursor:pointer; transition:background .2s }
+    #sendBtn:hover { background:var(--accent-hover) }
 
-  .nav-actions { display: flex; align-items: center; gap: 1rem; margin-left: auto; }
+    /* Right panel */
+    .right { width:200px; background:var(--muted); padding:12px; border-left:1px solid #242629 }
+    .right ul { list-style:none; padding:0; margin:4px 0 }
+    .right li { padding:4px 0; font-size:13px }
+    .small { font-size:12px; color:var(--text-muted) }
 
-  .cart-btn {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    padding: 6px 14px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.82rem;
-    font-weight: 500;
-    display: flex; align-items: center; gap: 6px;
-    transition: all 0.15s;
-  }
-  .cart-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .cart-badge {
-    background: var(--accent);
-    color: #fff;
-    width: 18px; height: 18px;
-    border-radius: 50%;
-    font-size: 0.7rem;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700;
-  }
+    /* Login screen */
+    #loginScreen { display:flex; align-items:center; justify-content:center; height:100vh; background:var(--bg) }
+    .login-box { background:var(--muted); padding:40px; border-radius:12px; box-shadow:0 0 20px rgba(0,0,0,0.4); text-align:center; width:300px }
+    .login-box h1 { margin:0 0 6px 0 }
+    .login-box p { margin:0 0 20px 0; color:var(--text-muted); font-size:13px }
+    .login-box input { display:block; width:100%; margin-bottom:12px; padding:10px; border-radius:6px; border:none; background:#0b0c0d; color:var(--text); box-sizing:border-box }
+    .login-actions { display:flex; gap:10px; justify-content:center }
+    .login-actions button { flex:1; padding:10px; border-radius:6px; border:none; background:var(--accent); color:white; cursor:pointer; transition:background .2s }
+    .login-actions button:hover { background:var(--accent-hover) }
+    #loginError { color:#e07070; font-size:13px; margin-top:10px; min-height:18px }
 
-  .user-avatar {
-    width: 32px; height: 32px;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    border-radius: 4px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.8rem; font-weight: 700;
-    cursor: pointer;
-    color: #fff;
-  }
-
-  /* PAGES */
-  .page { display: none; }
-  .page.active { display: block; }
-
-  /* STORE PAGE */
-  .featured {
-    height: 420px;
-    position: relative;
-    overflow: hidden;
-    cursor: pointer;
-  }
-  .featured-bg {
-    width: 100%; height: 100%;
-    object-fit: cover;
-    transition: transform 0.6s ease;
-  }
-  .featured:hover .featured-bg { transform: scale(1.02); }
-  .featured-bg-div {
-    width: 100%; height: 100%;
-    transition: transform 0.6s ease;
-  }
-  .featured:hover .featured-bg-div { transform: scale(1.02); }
-
-  .featured-overlay {
-    position: absolute; inset: 0;
-    background: linear-gradient(90deg, rgba(14,14,18,0.92) 0%, rgba(14,14,18,0.5) 50%, transparent 100%);
-    display: flex; align-items: flex-end;
-    padding: 2.5rem 3rem;
-  }
-
-  .featured-info { max-width: 420px; }
-  .featured-tag {
-    font-size: 0.7rem;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--accent);
-    background: var(--accent-glow);
-    border: 1px solid var(--border-accent);
-    padding: 3px 10px;
-    border-radius: 2px;
-    display: inline-block;
-    margin-bottom: 0.75rem;
-  }
-  .featured-title {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 2.8rem;
-    font-weight: 700;
-    line-height: 1;
-    margin-bottom: 0.6rem;
-    text-shadow: 0 2px 20px rgba(0,0,0,0.8);
-  }
-  .featured-desc {
-    font-size: 0.88rem;
-    color: var(--text-secondary);
-    line-height: 1.6;
-    margin-bottom: 1.2rem;
-  }
-  .featured-meta { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-
-  .price-big {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: var(--green);
-  }
-  .price-old {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    text-decoration: line-through;
-  }
-  .discount-badge {
-    background: var(--green);
-    color: #fff;
-    padding: 3px 8px;
-    border-radius: 3px;
-    font-size: 0.8rem;
-    font-weight: 700;
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    padding: 9px 22px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    transition: all 0.15s;
-    text-transform: uppercase;
-  }
-  .btn-primary:hover { background: #5db3f0; transform: translateY(-1px); }
-  .btn-primary:active { transform: translateY(0); }
-
-  .btn-secondary {
-    background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-    padding: 8px 18px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 500;
-    transition: all 0.15s;
-  }
-  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-
-  .section { padding: 2rem 2.5rem; }
-  .section-title {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 1.2rem;
-    display: flex; align-items: center; gap: 0.75rem;
-  }
-  .section-title::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  .games-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem;
-  }
-
-  .game-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-  }
-  .game-card:hover {
-    border-color: var(--border-accent);
-    transform: translateY(-3px);
-    box-shadow: 0 8px 30px rgba(79,163,224,0.12);
-  }
-
-  .game-thumb {
-    width: 100%;
-    aspect-ratio: 16/9;
-    object-fit: cover;
-  }
-  .game-thumb-div {
-    width: 100%;
-    aspect-ratio: 16/9;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 3rem;
-  }
-
-  .game-info { padding: 0.7rem 0.85rem; }
-  .game-name {
-    font-weight: 600;
-    font-size: 0.88rem;
-    margin-bottom: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .game-tags {
-    display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px;
-  }
-  .tag {
-    font-size: 0.68rem;
-    background: rgba(255,255,255,0.06);
-    color: var(--text-muted);
-    padding: 2px 6px;
-    border-radius: 2px;
-  }
-  .game-footer {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-top: 6px;
-  }
-  .game-price { font-weight: 600; font-size: 0.9rem; color: var(--green); }
-  .game-price.free { color: var(--accent); }
-  .game-rating {
-    font-size: 0.72rem;
-    color: var(--gold);
-    display: flex; align-items: center; gap: 3px;
-  }
-
-  .sale-overlay {
-    position: absolute;
-    top: 8px; left: 8px;
-    background: var(--green);
-    color: #fff;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 3px;
-  }
-
-  .wishlist-btn {
-    position: absolute;
-    top: 6px; right: 6px;
-    background: rgba(0,0,0,0.6);
-    border: none;
-    color: var(--text-muted);
-    width: 28px; height: 28px;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-    opacity: 0;
-  }
-  .game-card:hover .wishlist-btn { opacity: 1; }
-  .wishlist-btn.wished { opacity: 1; color: #e74c3c; }
-  .wishlist-btn:hover { color: #e74c3c; }
-
-  /* MODAL */
-  .modal-bg {
-    display: none;
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.8);
-    z-index: 200;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-  }
-  .modal-bg.open { display: flex; }
-  .modal {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    width: 100%;
-    max-width: 700px;
-    max-height: 85vh;
-    overflow-y: auto;
-  }
-  .modal-hero {
-    height: 240px;
-    position: relative;
-    overflow: hidden;
-  }
-  .modal-hero-bg {
-    width: 100%; height: 100%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 5rem;
-  }
-  .modal-body { padding: 1.5rem 2rem 2rem; }
-  .modal-title {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-  }
-  .modal-meta { display: flex; gap: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-  .modal-meta-item { font-size: 0.8rem; color: var(--text-secondary); }
-  .modal-meta-item strong { color: var(--text-primary); }
-  .modal-desc { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 1.5rem; }
-  .modal-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-  .modal-price { font-family: 'Rajdhani', sans-serif; font-size: 1.8rem; font-weight: 700; color: var(--green); }
-  .modal-close {
-    position: absolute; top: 1rem; right: 1rem;
-    background: rgba(0,0,0,0.6);
-    border: none; color: var(--text-primary);
-    width: 32px; height: 32px; border-radius: 4px;
-    cursor: pointer; font-size: 1rem;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .modal-close:hover { background: rgba(200,50,50,0.4); }
-
-  /* LIBRARY PAGE */
-  .library-header {
-    background: var(--bg-panel);
-    border-bottom: 1px solid var(--border);
-    padding: 1.5rem 2.5rem;
-    display: flex; align-items: center; gap: 1.5rem;
-  }
-  .library-title {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    color: var(--text-primary);
-  }
-  .library-count {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    background: var(--bg-card);
-    padding: 3px 10px;
-    border-radius: 20px;
-  }
-
-  .search-input {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
-    padding: 7px 14px;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.85rem;
-    width: 220px;
-    transition: border-color 0.15s;
-    outline: none;
-  }
-  .search-input:focus { border-color: var(--accent); }
-  .search-input::placeholder { color: var(--text-muted); }
-
-  .lib-sort {
-    margin-left: auto;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    padding: 7px 14px;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.82rem;
-    outline: none;
-    cursor: pointer;
-  }
-
-  .library-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 1rem;
-    padding: 2rem 2.5rem;
-  }
-
-  .lib-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-    display: flex;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .lib-card:hover { border-color: var(--border-accent); background: var(--bg-hover); }
-  .lib-card-thumb {
-    width: 80px; height: 60px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.8rem;
-    flex-shrink: 0;
-  }
-  .lib-card-info { padding: 0.5rem 0.75rem; min-width: 0; }
-  .lib-card-name { font-weight: 600; font-size: 0.85rem; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .lib-card-hours { font-size: 0.75rem; color: var(--text-muted); }
-  .lib-play-btn {
-    margin-left: auto; margin-right: 0.75rem;
-    align-self: center;
-    background: var(--accent);
-    border: none; color: #fff;
-    width: 32px; height: 32px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 0.8rem;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-    flex-shrink: 0;
-  }
-  .lib-play-btn:hover { background: #5db3f0; transform: scale(1.1); }
-
-  /* CART PANEL */
-  .cart-panel {
-    position: fixed;
-    top: 52px; right: 0;
-    width: 340px;
-    height: calc(100vh - 52px);
-    background: var(--bg-panel);
-    border-left: 1px solid var(--border);
-    transform: translateX(100%);
-    transition: transform 0.25s ease;
-    z-index: 150;
-    display: flex; flex-direction: column;
-  }
-  .cart-panel.open { transform: translateX(0); }
-  .cart-panel-header {
-    padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .cart-panel-title {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-  .cart-close {
-    background: none; border: none;
-    color: var(--text-muted); cursor: pointer; font-size: 1.1rem;
-  }
-  .cart-close:hover { color: var(--text-primary); }
-
-  .cart-items { flex: 1; overflow-y: auto; padding: 1rem; }
-  .cart-item {
-    display: flex; align-items: center; gap: 0.75rem;
-    padding: 0.75rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    margin-bottom: 0.6rem;
-  }
-  .cart-item-thumb {
-    width: 52px; height: 40px;
-    border-radius: 3px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.3rem;
-    flex-shrink: 0;
-  }
-  .cart-item-name { font-size: 0.85rem; font-weight: 500; flex: 1; }
-  .cart-item-price { font-size: 0.85rem; font-weight: 600; color: var(--green); }
-  .cart-remove {
-    background: none; border: none;
-    color: var(--text-muted); cursor: pointer; font-size: 0.85rem;
-    padding: 2px;
-  }
-  .cart-remove:hover { color: #e74c3c; }
-
-  .cart-footer {
-    padding: 1.25rem 1.5rem;
-    border-top: 1px solid var(--border);
-  }
-  .cart-total {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 1rem;
-    font-size: 0.95rem;
-  }
-  .cart-total-price {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--green);
-  }
-  .btn-checkout {
-    width: 100%;
-    background: var(--green);
-    color: #fff;
-    border: none;
-    padding: 11px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.9rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    transition: all 0.15s;
-  }
-  .btn-checkout:hover { background: #6bbf6c; }
-
-  .empty-cart {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-  }
-  .empty-cart-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
-
-  /* TOAST */
-  .toast {
-    position: fixed; bottom: 1.5rem; left: 50%;
-    transform: translateX(-50%) translateY(100px);
-    background: var(--bg-card);
-    border: 1px solid var(--border-accent);
-    color: var(--accent);
-    padding: 10px 20px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    z-index: 300;
-    transition: transform 0.3s ease;
-    white-space: nowrap;
-  }
-  .toast.show { transform: translateX(-50%) translateY(0); }
-
-  /* SCROLLBAR */
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-
-  /* FEATURED CAROUSEL DOTS */
-  .carousel-dots {
-    position: absolute; bottom: 1rem; right: 1.5rem;
-    display: flex; gap: 6px;
-  }
-  .carousel-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.3);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .carousel-dot.active {
-    background: var(--accent);
-    width: 18px;
-    border-radius: 3px;
-  }
-
-  /* FILTER BAR */
-  .filter-bar {
-    display: flex; gap: 0.5rem;
-    padding: 0 2.5rem 1rem;
-    flex-wrap: wrap;
-  }
-  .filter-chip {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    padding: 5px 14px;
-    border-radius: 20px;
-    font-size: 0.78rem;
-    cursor: pointer;
-    transition: all 0.15s;
-    font-family: 'Exo 2', sans-serif;
-  }
-  .filter-chip:hover { border-color: var(--accent); color: var(--accent); }
-  .filter-chip.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
-
-  /* PUBLISH PAGE */
-  .publish-layout {
-    display: grid;
-    grid-template-columns: 1fr 340px;
-    gap: 2rem;
-    padding: 2rem 2.5rem;
-    max-width: 1100px;
-  }
-
-  .publish-form-card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 2rem;
-  }
-
-  .publish-section-label {
-    font-size: 0.72rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 0.6rem;
-    display: block;
-  }
-
-  .pub-input, .pub-textarea, .pub-select {
-    width: 100%;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-primary);
-    padding: 10px 14px;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.88rem;
-    outline: none;
-    transition: border-color 0.15s;
-    margin-bottom: 1.25rem;
-  }
-  .pub-input:focus, .pub-textarea:focus, .pub-select:focus { border-color: var(--accent); }
-  .pub-textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
-  .pub-select { cursor: pointer; }
-  .pub-select option { background: var(--bg-card); }
-
-  .pub-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-
-  .price-row { display: flex; align-items: center; gap: 0; }
-  .price-prefix {
-    background: var(--bg-hover);
-    border: 1px solid var(--border);
-    border-right: none;
-    border-radius: 4px 0 0 4px;
-    padding: 10px 12px;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    line-height: 1;
-  }
-  .price-row .pub-input {
-    border-radius: 0 4px 4px 0;
-    margin-bottom: 0;
-  }
-
-  .free-toggle {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 1.25rem;
-    cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-  .free-toggle input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
-
-  .tags-input-wrap {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 6px 10px;
-    display: flex; flex-wrap: wrap; gap: 6px;
-    margin-bottom: 1.25rem;
-    min-height: 44px;
-    align-items: center;
-    transition: border-color 0.15s;
-    cursor: text;
-  }
-  .tags-input-wrap:focus-within { border-color: var(--accent); }
-  .pub-tag-chip {
-    background: var(--accent-glow);
-    border: 1px solid var(--border-accent);
-    color: var(--accent);
-    padding: 3px 8px 3px 10px;
-    border-radius: 3px;
-    font-size: 0.78rem;
-    display: flex; align-items: center; gap: 5px;
-  }
-  .pub-tag-chip button {
-    background: none; border: none; color: var(--accent);
-    cursor: pointer; font-size: 0.8rem; padding: 0; line-height: 1;
-  }
-  .tags-bare-input {
-    background: none; border: none; outline: none;
-    color: var(--text-primary); font-family: 'Exo 2', sans-serif;
-    font-size: 0.85rem; flex: 1; min-width: 80px;
-  }
-  .tags-hint { font-size: 0.74rem; color: var(--text-muted); margin-top: -1rem; margin-bottom: 1.25rem; }
-
-  /* IMAGE UPLOAD DROPZONE */
-  .dropzone {
-    border: 2px dashed var(--border);
-    border-radius: 8px;
-    padding: 2rem 1rem;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-    overflow: hidden;
-    background: var(--bg-card);
-    margin-bottom: 1.25rem;
-  }
-  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-glow); }
-  .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .dropzone-icon { font-size: 2rem; margin-bottom: 0.5rem; }
-  .dropzone-text { font-size: 0.85rem; color: var(--text-secondary); }
-  .dropzone-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
-  .dropzone-preview {
-    width: 100%; height: 160px;
-    object-fit: cover;
-    border-radius: 5px;
-    display: none;
-  }
-
-  /* PREVIEW CARD */
-  .preview-sticky {
-    position: sticky;
-    top: 70px;
-  }
-
-  .preview-label {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 0.9rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 1rem;
-  }
-
-  .preview-game-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 1.5rem;
-  }
-  .preview-thumb {
-    width: 100%; height: 160px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 4rem;
-    position: relative;
-    overflow: hidden;
-  }
-  .preview-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
-  .preview-card-body { padding: 1rem; }
-  .preview-card-name {
-    font-weight: 600; font-size: 1rem; margin-bottom: 4px;
-    color: var(--text-primary);
-  }
-  .preview-card-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
-  .preview-card-footer { display: flex; align-items: center; justify-content: space-between; }
-  .preview-card-price { font-weight: 700; font-size: 1rem; color: var(--green); }
-
-  .publish-checklist {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.25rem;
-  }
-  .checklist-title {
-    font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--text-muted); margin-bottom: 0.75rem;
-  }
-  .check-item {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 0.82rem; color: var(--text-muted);
-    margin-bottom: 6px;
-  }
-  .check-item.done { color: var(--green); }
-  .check-dot {
-    width: 16px; height: 16px; border-radius: 50%;
-    border: 1.5px solid currentColor;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-    font-size: 0.6rem;
-  }
-  .check-item.done .check-dot { background: var(--green); border-color: var(--green); color: #fff; }
-
-  .btn-publish {
-    width: 100%;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    color: #fff;
-    border: none;
-    padding: 13px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-family: 'Exo 2', sans-serif;
-    font-size: 0.95rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-top: 1rem;
-    transition: all 0.2s;
-  }
-  .btn-publish:hover { opacity: 0.9; transform: translateY(-1px); }
-  .btn-publish:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-  .publish-success {
-    text-align: center;
-    padding: 3rem 2rem;
-    display: none;
-  }
-  .publish-success-icon { font-size: 3.5rem; margin-bottom: 1rem; }
-  .publish-success h2 {
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem;
-  }
-  .publish-success p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem; }
-
-  .dev-badge {
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    color: #fff;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    padding: 2px 7px;
-    border-radius: 3px;
-    text-transform: uppercase;
-  }
-</style>
+    /* Invite badge */
+    .invite-badge { font-size:11px; background:var(--panel); padding:2px 6px; border-radius:4px; color:var(--text-muted); cursor:pointer; margin-left:4px }
+    .invite-badge:hover { background:var(--accent) }
+  </style>
 </head>
 <body>
 
-<nav>
-  <div class="logo">VAP<span>OR</span></div>
-  <div class="nav-links">
-    <div class="nav-link active" onclick="showPage('store',this)">Store</div>
-    <div class="nav-link" onclick="showPage('library',this)">Library</div>
-    <div class="nav-link" onclick="showPage('community',this)">Community</div>
-    <div class="nav-link" onclick="showPage('publish',this)" style="color:var(--accent2);">+ Publish</div>
-  </div>
-  <div class="nav-actions">
-    <button class="cart-btn" onclick="toggleCart()">
-      <span>🛒</span>
-      Cart
-      <div class="cart-badge" id="cart-badge">0</div>
-    </button>
-    <div class="user-avatar" title="Player1">P1</div>
-  </div>
-</nav>
-
-<!-- STORE PAGE -->
-<div id="page-store" class="page active">
-
-  <!-- Featured Carousel -->
-  <div class="featured" id="featured-hero" onclick="">
-    <div class="featured-bg-div" id="featured-bg-div"></div>
-    <div class="featured-overlay">
-      <div class="featured-info">
-        <div class="featured-tag" id="feat-tag">Featured</div>
-        <div class="featured-title" id="feat-title"></div>
-        <div class="featured-desc" id="feat-desc"></div>
-        <div class="featured-meta">
-          <div>
-            <div class="price-old" id="feat-old-price"></div>
-            <div class="price-big" id="feat-price"></div>
-          </div>
-          <span class="discount-badge" id="feat-discount"></span>
-          <button class="btn-primary" id="feat-add-btn">Add to Cart</button>
-          <button class="btn-secondary" onclick="openModal(featuredIndex)">Details</button>
-        </div>
-      </div>
+<!-- Login Screen -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>RELINK</h1>
+    <p>Username-based chat</p>
+    <input id="usernameInput" type="text" placeholder="Username (letters, numbers, _)" autocomplete="off">
+    <input id="passwordInput" type="password" placeholder="Password">
+    <div class="login-actions">
+      <button id="loginBtn">Login</button>
+      <button id="signupBtn">Sign Up</button>
     </div>
-    <div class="carousel-dots" id="carousel-dots"></div>
-  </div>
-
-  <!-- Filter Bar -->
-  <div class="section" style="padding-bottom:0;">
-    <div class="section-title">Browse Store</div>
-  </div>
-  <div class="filter-bar" id="filter-bar">
-    <div class="filter-chip active" onclick="filterGames('All',this)">All</div>
-    <div class="filter-chip" onclick="filterGames('Action',this)">Action</div>
-    <div class="filter-chip" onclick="filterGames('RPG',this)">RPG</div>
-    <div class="filter-chip" onclick="filterGames('Strategy',this)">Strategy</div>
-    <div class="filter-chip" onclick="filterGames('Simulation',this)">Simulation</div>
-    <div class="filter-chip" onclick="filterGames('Adventure',this)">Adventure</div>
-    <div class="filter-chip" onclick="filterGames('Free',this)">Free to Play</div>
-    <div class="filter-chip" onclick="filterGames('Sale',this)">On Sale</div>
-  </div>
-
-  <div class="section" style="padding-top:1rem;">
-    <div class="games-grid" id="store-grid"></div>
+    <div id="loginError"></div>
   </div>
 </div>
 
-<!-- LIBRARY PAGE -->
-<div id="page-library" class="page">
-  <div class="library-header">
-    <div class="library-title">My Library</div>
-    <div class="library-count" id="lib-count">0 Games</div>
-    <input type="text" class="search-input" placeholder="Search library..." oninput="searchLibrary(this.value)">
-    <select class="lib-sort" onchange="sortLibrary(this.value)">
-      <option value="name">Name</option>
-      <option value="hours">Play Time</option>
-      <option value="recent">Recently Played</option>
-    </select>
+<!-- Main App (hidden until login) -->
+<div class="app" id="app" style="display:none;">
+  <div class="servers" id="serversCol">
+    <div class="server-btn" id="homeBtn" title="Direct Messages">R</div>
+    <div class="server-btn create" id="createServerBtn" title="Create or Join Server">+</div>
   </div>
-  <div class="library-grid" id="library-grid"></div>
-</div>
 
-<!-- COMMUNITY PAGE -->
-<div id="page-community" class="page">
-  <div class="section">
-    <div class="section-title">Community Hub</div>
-    <div style="text-align:center; padding:5rem 2rem; color:var(--text-muted);">
-      <div style="font-size:3rem;margin-bottom:1rem;">🌐</div>
-      <div style="font-size:1.1rem;margin-bottom:0.5rem;color:var(--text-secondary);">Community features coming soon</div>
-      <div style="font-size:0.85rem;">Forums, reviews, and friend activity will appear here.</div>
+  <div class="server-panel" id="serverPanel">
+    <div class="server-header">
+      <span id="serverHeader">No server</span>
+      <span id="inviteBadge" class="invite-badge" title="Copy invite code" style="display:none">📋 invite</span>
     </div>
-  </div>
-</div>
-
-<!-- PUBLISH PAGE -->
-<div id="page-publish" class="page">
-  <div style="padding:1.5rem 2.5rem 0; border-bottom:1px solid var(--border); background:var(--bg-panel);">
-    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem;">
-      <div style="font-family:'Rajdhani',sans-serif;font-size:1.5rem;font-weight:700;">Publish Your Game</div>
-      <span class="dev-badge">Developer Portal</span>
-    </div>
-    <div style="display:flex;gap:2rem;font-size:0.8rem;color:var(--text-muted);padding-bottom:1rem;">
-      <span>🎮 12 games on Vapor</span>
-      <span>👤 Your developer account: Player1</span>
-      <span>💰 Revenue share: 70% to you</span>
+    <div class="channel-list" id="channelList"></div>
+    <div class="channel-actions">
+      <button class="btn" id="addChannelBtn">+ Channel</button>
+      <button class="btn danger" id="logoutBtn">Logout</button>
     </div>
   </div>
 
-  <!-- Success state -->
-  <div class="publish-success" id="publish-success">
-    <div class="publish-success-icon">🚀</div>
-    <h2>Game Published!</h2>
-    <p id="success-msg">Your game is now live on the Vapor store.</p>
-    <button class="btn-primary" onclick="goToStore()">View in Store →</button>
-    <button class="btn-secondary" style="margin-left:0.75rem;" onclick="resetPublishForm()">Publish Another</button>
+  <div class="chat">
+    <div class="chat-header" id="chatHeader"># none</div>
+    <div class="messages" id="messages"></div>
+    <div class="composer">
+      <input id="inputMsg" class="input" placeholder="Message…" />
+      <button class="btn" id="sendBtn">Send</button>
+    </div>
   </div>
 
-  <!-- Form -->
-  <div class="publish-layout" id="publish-form-area">
-    <div class="publish-form-card">
-      <div style="margin-bottom:1.75rem;">
-        <label class="publish-section-label">Cover Image</label>
-        <div class="dropzone" id="dropzone"
-          ondragover="dzDrag(event,true)" ondragleave="dzDrag(event,false)" ondrop="dzDrop(event)">
-          <input type="file" id="cover-file" accept="image/*" onchange="handleCoverUpload(this)">
-          <img class="dropzone-preview" id="cover-preview" alt="Cover">
-          <div id="dropzone-placeholder">
-            <div class="dropzone-icon">🖼️</div>
-            <div class="dropzone-text">Drop your cover image here</div>
-            <div class="dropzone-sub">PNG, JPG, GIF · Recommended 460×215px</div>
-          </div>
-        </div>
-      </div>
-
-      <label class="publish-section-label">Game Title *</label>
-      <input class="pub-input" id="pub-title" type="text" placeholder="Enter game name..."
-        oninput="updatePreview()">
-
-      <label class="publish-section-label">Short Description *</label>
-      <textarea class="pub-textarea" id="pub-desc" placeholder="Describe your game in 1–3 sentences. What makes it exciting?"
-        oninput="updatePreview()"></textarea>
-
-      <div class="pub-row">
-        <div>
-          <label class="publish-section-label">Genre *</label>
-          <select class="pub-select" id="pub-genre" onchange="updatePreview()">
-            <option value="">Select genre...</option>
-            <option>Action</option>
-            <option>RPG</option>
-            <option>Strategy</option>
-            <option>Simulation</option>
-            <option>Adventure</option>
-            <option>Puzzle</option>
-            <option>Horror</option>
-            <option>Sports</option>
-            <option>Other</option>
-          </select>
-        </div>
-        <div>
-          <label class="publish-section-label">Your Studio Name *</label>
-          <input class="pub-input" id="pub-dev" type="text" placeholder="e.g. Pixel Forge Studios"
-            oninput="updatePreview()">
-        </div>
-      </div>
-
-      <label class="publish-section-label">Tags</label>
-      <div class="tags-input-wrap" id="tags-wrap" onclick="document.getElementById('tag-input').focus()">
-        <div class="tags-bare-input-wrap" id="pub-tags-display" style="display:contents;"></div>
-        <input class="tags-bare-input" id="tag-input" placeholder="Add a tag, press Enter..."
-          onkeydown="handleTagInput(event)">
-      </div>
-      <div class="tags-hint">Press Enter or comma to add · Max 5 tags</div>
-
-      <label class="publish-section-label">Release Status</label>
-      <select class="pub-select" id="pub-status">
-        <option value="released">Available Now</option>
-        <option value="earlyaccess">Early Access</option>
-        <option value="comingsoon">Coming Soon</option>
-      </select>
-    </div>
-
-    <!-- Preview + checklist -->
-    <div class="preview-sticky">
-      <div class="preview-label">Live Preview</div>
-      <div class="preview-game-card">
-        <div class="preview-thumb" id="preview-thumb">
-          <span id="preview-emoji">🎮</span>
-          <img id="preview-img" alt="cover">
-        </div>
-        <div class="preview-card-body">
-          <div class="preview-card-name" id="preview-name">Your Game Title</div>
-          <div class="preview-card-tags" id="preview-tags"></div>
-          <div class="preview-card-footer">
-            <div class="preview-card-price" id="preview-price">$9.99</div>
-            <div style="font-size:0.75rem;color:var(--gold);">★ New</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="publish-checklist">
-        <div class="checklist-title">Publishing Checklist</div>
-        <div class="check-item" id="chk-title">
-          <div class="check-dot">✓</div> Game title added
-        </div>
-        <div class="check-item" id="chk-desc">
-          <div class="check-dot">✓</div> Description written
-        </div>
-        <div class="check-item" id="chk-genre">
-          <div class="check-dot">✓</div> Genre selected
-        </div>
-        <div class="check-item" id="chk-dev">
-          <div class="check-dot">✓</div> Studio name set
-        </div>
-        <div class="check-item" id="chk-cover">
-          <div class="check-dot">✓</div> Cover image uploaded
-        </div>
-        <button class="btn-publish" id="publish-btn" disabled onclick="publishGame()">
-          🚀 Publish to Store
-        </button>
-      </div>
-    </div>
+  <div class="right">
+    <div class="small">Online in channel</div>
+    <ul id="onlineList"></ul>
+    <hr style="border:none;height:1px;background:#242629;margin:8px 0">
+    <div class="small">My Account</div>
+    <div id="myUsername" style="font-size:13px;margin-top:4px"></div>
   </div>
 </div>
 
-
-<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
-  <div class="modal" id="modal">
-    <div class="modal-hero" id="modal-hero">
-      <div class="modal-hero-bg" id="modal-hero-bg"></div>
-      <button class="modal-close" onclick="closeModalDirect()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="modal-title" id="modal-title"></div>
-      <div class="modal-meta" id="modal-meta"></div>
-      <div class="modal-desc" id="modal-desc"></div>
-      <div class="modal-actions">
-        <div class="modal-price" id="modal-price"></div>
-        <button class="btn-primary" id="modal-add-btn">Add to Cart</button>
-        <button class="btn-secondary" id="modal-lib-btn">Add to Wishlist</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- CART PANEL -->
-<div class="cart-panel" id="cart-panel">
-  <div class="cart-panel-header">
-    <div class="cart-panel-title">Cart</div>
-    <button class="cart-close" onclick="toggleCart()">✕</button>
-  </div>
-  <div class="cart-items" id="cart-items-list"></div>
-  <div class="cart-footer" id="cart-footer" style="display:none;">
-    <div class="cart-total">
-      <span>Total</span>
-      <div class="cart-total-price" id="cart-total">$0.00</div>
-    </div>
-    <button class="btn-checkout" onclick="checkout()">Purchase →</button>
-  </div>
-</div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
-
-<script>
-const GAMES = [];
-
-let cart = [];
-let library = [];
-let wishlisted = [];
-let featuredIndex = 0;
-let currentFilter = 'All';
-const featuredGames = GAMES.filter(g => g.featured);
-
-function getPrice(g) { return 'Free'; }
-
-function starStr(r) {
-  const full = Math.floor(r);
-  const half = r - full >= 0.5 ? 1 : 0;
-  return '★'.repeat(full) + (half ? '½' : '') + ' ' + r;
-}
-
-function buildFeatured() {
-  const featEl = document.getElementById('featured-hero');
-  if (featuredGames.length === 0) { featEl.style.display = 'none'; return; }
-  featEl.style.display = '';
-  const dots = document.getElementById('carousel-dots');
-  dots.innerHTML = featuredGames.map((g,i) =>
-    `<div class="carousel-dot ${i===0?'active':''}" onclick="setFeatured(${i})"></div>`
-  ).join('');
-  setFeatured(0);
-}
-
-function setFeatured(i) {
-  if (!featuredGames.length) return;
-  featuredIndex = i;
-  const g = featuredGames[i];
-  const colors = ['linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)','linear-gradient(135deg,#1a0a2e,#2d1b4e,#4a1580)','linear-gradient(135deg,#0a1a2e,#0e2d4e,#0a3d62)'];
-  document.getElementById('featured-bg-div').style.cssText = `width:100%;height:100%;background:${colors[i%colors.length]};display:flex;align-items:center;justify-content:center;font-size:8rem;transition:transform 0.6s ease;`;
-  document.getElementById('featured-bg-div').textContent = g.emoji;
-  document.getElementById('feat-tag').textContent = g.sale ? '🔥 On Sale' : '⭐ Featured';
-  document.getElementById('feat-title').textContent = g.name;
-  document.getElementById('feat-desc').textContent = g.desc;
-  document.getElementById('feat-price').textContent = getPrice(g);
-  document.getElementById('feat-old-price').textContent = g.oldPrice ? '$' + g.oldPrice.toFixed(2) : '';
-  const disc = document.getElementById('feat-discount');
-  if (g.oldPrice) { disc.textContent = '-' + Math.round((1 - g.price/g.oldPrice)*100) + '%'; disc.style.display=''; }
-  else disc.style.display = 'none';
-  document.getElementById('feat-add-btn').onclick = () => addToCart(g.id);
-  document.querySelectorAll('.carousel-dot').forEach((d,j) => d.classList.toggle('active', j===i));
-}
-
-function buildStoreGrid(filter) {
-  const grid = document.getElementById('store-grid');
-  let list = GAMES.filter(g => !library.includes(g.id));
-  if (filter === 'Free') list = list.filter(g => g.price === 0);
-  else if (filter === 'Sale') list = list.filter(g => g.sale);
-  else if (filter !== 'All') list = list.filter(g => g.genre === filter);
-  if (list.length === 0) {
-    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:5rem 2rem;color:var(--text-muted);">
-      <div style="font-size:3rem;margin-bottom:1rem;">🎮</div>
-      <div style="font-size:1.1rem;color:var(--text-secondary);margin-bottom:0.5rem;">No games yet</div>
-      <div style="font-size:0.85rem;">Be the first to publish one!</div>
-    </div>`;
-    return;
-  }
-  grid.innerHTML = list.map(g => {
-    const thumbStyle = g.coverUrl
-      ? `background-image:url(${g.coverUrl});background-size:cover;background-position:center;`
-      : `background:${thumbBg(g.id)};`;
-    const thumbContent = g.coverUrl ? '' : g.emoji;
-    return `
-    <div class="game-card" onclick="openModal(${GAMES.indexOf(g)})">
-      ${g.sale ? `<div class="sale-overlay">-${Math.round((1-g.price/g.oldPrice)*100)}%</div>` : ''}
-      <button class="wishlist-btn ${wishlisted.includes(g.id)?'wished':''}" onclick="toggleWish(event,${g.id})" title="Wishlist">♥</button>
-      <div class="game-thumb-div" style="${thumbStyle}">${thumbContent}</div>
-      <div class="game-info">
-        <div class="game-name">${g.name}</div>
-        <div class="game-tags">${g.tags.slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
-        <div class="game-footer">
-          <div class="game-price ${g.price===0?'free':''}">${getPrice(g)}</div>
-          <div class="game-rating">★ ${g.rating}</div>
-        </div>
-      </div>
-    </div>
-  `}).join('');
-}
-
-function thumbBg(id) {
-  const bgs = ['#1a1a2e','#1a0a2e','#0a1a2e','#1a2e0a','#2e1a0a','#0a2e2e','#2e0a1a','#1e1e0a'];
-  const n = typeof id === 'string' ? id.split('').reduce((a,c) => a + c.charCodeAt(0), 0) : id;
-  return bgs[Math.abs(n) % bgs.length];
-}
-
-function filterGames(type, el) {
-  currentFilter = type;
-  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  buildStoreGrid(type);
-}
-
-function buildLibrary(list) {
-  const libGames = (list || library).map(id => GAMES.find(g => g.id === id)).filter(Boolean);
-  document.getElementById('lib-count').textContent = libGames.length + ' Games';
-  document.getElementById('library-grid').innerHTML = libGames.length === 0
-    ? `<div style="grid-column:1/-1;text-align:center;padding:4rem;color:var(--text-muted);">
-        <div style="font-size:2.5rem;margin-bottom:1rem;">📚</div>
-        <div>Your library is empty. Add games from the store!</div></div>`
-    : libGames.map(g => `
-      <div class="lib-card" onclick="openModal(${GAMES.indexOf(g)})">
-        <div class="lib-card-thumb" style="background:${thumbBg(g.id)}">${g.emoji}</div>
-        <div class="lib-card-info">
-          <div class="lib-card-name">${g.name}</div>
-          <div class="lib-card-hours">${(Math.random()*200).toFixed(1)}h played</div>
-        </div>
-        <button class="lib-play-btn" onclick="playGame(event,'${g.name}')">▶</button>
-      </div>
-    `).join('');
-}
-
-function searchLibrary(val) {
-  const libGames = library.map(id => GAMES.find(g => g.id === id)).filter(Boolean);
-  const filtered = libGames.filter(g => g.name.toLowerCase().includes(val.toLowerCase()));
-  buildLibrary(filtered.map(g => g.id));
-}
-
-function sortLibrary(by) { buildLibrary(); }
-
-function playGame(e, name) {
-  e.stopPropagation();
-  showToast('▶ Launching ' + name + '...');
-}
-
-function openModal(idx) {
-  const g = GAMES[idx];
-  const heroBg = document.getElementById('modal-hero-bg');
-  if (g.coverUrl) {
-    heroBg.style.cssText = `width:100%;height:100%;background-image:url(${g.coverUrl});background-size:cover;background-position:center;`;
-    heroBg.textContent = '';
-  } else {
-    heroBg.style.cssText = `width:100%;height:100%;background:${thumbBg(g.id)};display:flex;align-items:center;justify-content:center;font-size:5rem;`;
-    heroBg.textContent = g.emoji;
-  }
-  document.getElementById('modal-title').textContent = g.name;
-  document.getElementById('modal-meta').innerHTML = `
-    <div class="modal-meta-item"><strong>${g.genre}</strong></div>
-    <div class="modal-meta-item">Dev: <strong>${g.dev}</strong></div>
-    <div class="modal-meta-item">Rating: <strong>★ ${g.rating} (${g.reviews} reviews)</strong></div>
-    <div class="modal-meta-item">Tags: <strong>${g.tags.join(', ')}</strong></div>
-  `;
-  document.getElementById('modal-desc').textContent = g.desc;
-  document.getElementById('modal-price').textContent = getPrice(g);
-  const inLib = library.includes(g.id);
-  const inCart = cart.some(c => c.id === g.id);
-  const addBtn = document.getElementById('modal-add-btn');
-  if (inLib) { addBtn.textContent = 'In Library'; addBtn.disabled = true; addBtn.style.opacity='0.5'; }
-  else if (inCart) { addBtn.textContent = 'In Cart ✓'; addBtn.onclick = toggleCart; }
-  else { addBtn.textContent = 'Add to Library'; addBtn.disabled=false; addBtn.style.opacity=''; addBtn.onclick = () => { addToCart(g.id); }; }
-  document.getElementById('modal-bg').classList.add('open');
-}
-
-function closeModal(e) { if (e.target === document.getElementById('modal-bg')) closeModalDirect(); }
-function closeModalDirect() { document.getElementById('modal-bg').classList.remove('open'); }
-
-function addToCart(gameId) {
-  const g = GAMES.find(x => x.id === gameId);
-  if (!g || cart.some(c => c.id === gameId) || library.includes(gameId)) return;
-  cart.push(g);
-  updateCartUI();
-  showToast('✓ ' + g.name + ' added to cart');
-  document.getElementById('modal-bg').classList.remove('open');
-}
-
-function removeFromCart(gameId) {
-  cart = cart.filter(c => c.id !== gameId);
-  updateCartUI();
-}
-
-function updateCartUI() {
-  const badge = document.getElementById('cart-badge');
-  badge.textContent = cart.length;
-  badge.style.background = cart.length > 0 ? 'var(--accent)' : 'var(--text-muted)';
-  const list = document.getElementById('cart-items-list');
-  const footer = document.getElementById('cart-footer');
-  if (cart.length === 0) {
-    list.innerHTML = `<div class="empty-cart"><div class="empty-cart-icon">🛒</div><div>Your cart is empty</div></div>`;
-    footer.style.display = 'none';
-  } else {
-    list.innerHTML = cart.map(g => `
-      <div class="cart-item">
-        <div class="cart-item-thumb" style="background:${thumbBg(g.id)}">${g.emoji}</div>
-        <div class="cart-item-name">${g.name}</div>
-        <div class="cart-item-price">${getPrice(g)}</div>
-        <button class="cart-remove" onclick="removeFromCart(${g.id})">✕</button>
-      </div>
-    `).join('');
-    footer.style.display = '';
-    const total = cart.reduce((s,g) => s + g.price, 0);
-    document.getElementById('cart-total').textContent = '$' + total.toFixed(2);
-  }
-  buildStoreGrid(currentFilter);
-}
-
-function toggleCart() { document.getElementById('cart-panel').classList.toggle('open'); }
-
-function checkout() {
-  const names = cart.map(g => g.id);
-  library = [...library, ...names];
-  cart = [];
-  updateCartUI();
-  buildLibrary();
-  buildStoreGrid(currentFilter);
-  document.getElementById('cart-panel').classList.remove('open');
-  showToast('🎮 Purchase complete! Check your Library.');
-}
-
-function toggleWish(e, gameId) {
-  e.stopPropagation();
-  if (wishlisted.includes(gameId)) wishlisted = wishlisted.filter(x => x !== gameId);
-  else wishlisted.push(gameId);
-  buildStoreGrid(currentFilter);
-}
-
-function showPage(name, el) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
-  el.classList.add('active');
-  if (name === 'library') buildLibrary();
-  document.getElementById('cart-panel').classList.remove('open');
-}
-
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
-}
-
-// ---- PUBLISH PAGE ----
-let pubTags = [];
-let coverDataUrl = null;
-const GAME_EMOJIS = ['🎮','👾','🕹️','⚡','🔥','💎','🌟','🏆','🛸','🧿'];
-
-function dzDrag(e, on) { e.preventDefault(); document.getElementById('dropzone').classList.toggle('dragover', on); }
-function dzDrop(e) {
-  e.preventDefault();
-  document.getElementById('dropzone').classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('image/')) loadCoverFile(file);
-}
-
-function handleCoverUpload(input) {
-  if (input.files[0]) loadCoverFile(input.files[0]);
-}
-
-function loadCoverFile(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    coverDataUrl = e.target.result;
-    document.getElementById('dropzone-placeholder').style.display = 'none';
-    const preview = document.getElementById('cover-preview');
-    preview.src = coverDataUrl;
-    preview.style.display = 'block';
-    // also update live preview card
-    const pImg = document.getElementById('preview-img');
-    pImg.src = coverDataUrl;
-    pImg.style.display = 'block';
-    document.getElementById('preview-emoji').style.display = 'none';
-    updateChecklist();
-  };
-  reader.readAsDataURL(file);
-}
-
-function handleTagInput(e) {
-  if ((e.key === 'Enter' || e.key === ',') && pubTags.length < 5) {
-    e.preventDefault();
-    const val = e.target.value.trim().replace(',','');
-    if (val && !pubTags.includes(val)) {
-      pubTags.push(val);
-      renderTags();
-      updatePreview();
-    }
-    e.target.value = '';
-  }
-}
-
-function removeTag(t) {
-  pubTags = pubTags.filter(x => x !== t);
-  renderTags();
-  updatePreview();
-}
-
-function renderTags() {
-  const display = document.getElementById('pub-tags-display');
-  display.innerHTML = pubTags.map(t =>
-    `<div class="pub-tag-chip">${t}<button onclick="removeTag('${t}')">✕</button></div>`
-  ).join('');
-}
-
-function updatePreview() {
-  const title = document.getElementById('pub-title').value.trim();
-  document.getElementById('preview-name').textContent = title || 'Your Game Title';
-  document.getElementById('preview-price').textContent = 'Free';
-  document.getElementById('preview-tags').innerHTML = pubTags.slice(0,3).map(t => `<span class="tag">${t}</span>`).join('');
-  updateChecklist();
-}
-
-function updateChecklist() {
-  const title = document.getElementById('pub-title').value.trim();
-  const desc = document.getElementById('pub-desc').value.trim();
-  const genre = document.getElementById('pub-genre').value;
-  const dev = document.getElementById('pub-dev').value.trim();
-
-  const checks = {
-    'chk-title': !!title,
-    'chk-desc': desc.length > 10,
-    'chk-genre': !!genre,
-    'chk-dev': !!dev,
-    'chk-cover': !!coverDataUrl,
-  };
-  let allDone = true;
-  Object.entries(checks).forEach(([id, done]) => {
-    const el = document.getElementById(id);
-    el.classList.toggle('done', done);
-    el.querySelector('.check-dot').textContent = done ? '✓' : '';
-    if (!done) allDone = false;
-  });
-  document.getElementById('publish-btn').disabled = !allDone;
-}
-
-function publishGame() {
-  const title = document.getElementById('pub-title').value.trim();
-  const desc = document.getElementById('pub-desc').value.trim();
-  const genre = document.getElementById('pub-genre').value;
-  const dev = document.getElementById('pub-dev').value.trim();
-  const isFree = document.getElementById('free-toggle').checked;
-  const price = isFree ? 0 : parseFloat(document.getElementById('pub-price').value) || 0;
-  const status = document.getElementById('pub-status').value;
-
-  const newGame = {
-    id: Date.now(),
-    name: title,
-    emoji: GAME_EMOJIS[Math.floor(Math.random() * GAME_EMOJIS.length)],
-    coverUrl: coverDataUrl,
-    genre,
-    tags: pubTags.length ? pubTags : [genre],
-    price,
-    oldPrice: null,
-    desc,
-    rating: 5.0,
-    reviews: '0',
-    dev,
-    featured: false,
-    sale: false,
-    isUserGame: true,
-    status,
-  };
-
-  GAMES.push(newGame);
-  // Add to library automatically (it's your own game!)
-  library.push(newGame.id);
-
-  document.getElementById('publish-form-area').style.display = 'none';
-  const success = document.getElementById('publish-success');
-  success.style.display = 'block';
-  document.getElementById('success-msg').textContent =
-    `"${title}" is now live on the Vapor store and in your library!`;
-
-  buildStoreGrid(currentFilter);
-  buildLibrary();
-}
-
-function goToStore() {
-  showPage('store', document.querySelector('.nav-link'));
-  document.querySelectorAll('.nav-link')[0].classList.add('active');
-  filterGames(document.getElementById('pub-genre').value || 'All', document.querySelector('.filter-chip'));
-}
-
-function resetPublishForm() {
-  document.getElementById('publish-form-area').style.display = '';
-  document.getElementById('publish-success').style.display = 'none';
-  document.getElementById('pub-title').value = '';
-  document.getElementById('pub-desc').value = '';
-  document.getElementById('pub-genre').value = '';
-  document.getElementById('pub-dev').value = '';
-  document.getElementById('pub-price').value = '';
-  document.getElementById('free-toggle').checked = false;
-  document.getElementById('pub-status').value = 'released';
-  document.getElementById('cover-preview').style.display = 'none';
-  document.getElementById('dropzone-placeholder').style.display = '';
-  document.getElementById('preview-img').style.display = 'none';
-  document.getElementById('preview-emoji').style.display = '';
-  coverDataUrl = null;
-  pubTags = [];
-  renderTags();
-  updatePreview();
-}
-
-// Auto-rotate featured
-setInterval(() => setFeatured((featuredIndex + 1) % featuredGames.length), 5000);
-
-buildFeatured();
-buildStoreGrid('All');
-updateCartUI();
-</script>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp }
-  from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { initializeApp }                              from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword,
+         signInWithEmailAndPassword, signOut,
+         onAuthStateChanged }                         from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+import { getFirestore, collection, doc, addDoc,
+         getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+         query, where, orderBy, limitToLast,
+         onSnapshot, serverTimestamp, arrayUnion }    from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
 const firebaseConfig = {
-  apiKey: "AIzaSyCDMIp_NMm4izG8WwT4ECToqxpZkzJeHQ8",
-  authDomain: "vapor-686e9.firebaseapp.com",
-  projectId: "vapor-686e9",
-  storageBucket: "vapor-686e9.firebasestorage.app",
-  messagingSenderId: "425067358686",
-  appId: "1:425067358686:web:b12b79d0deb01909ee954f"
+  apiKey:            "AIzaSyCT_MJarWSBiVgKtrqv6VjRcHmwb42it7s",
+  authDomain:        "relink-fbfa5.firebaseapp.com",
+  projectId:         "relink-fbfa5",
+  storageBucket:     "relink-fbfa5.firebasestorage.app",
+  messagingSenderId: "37286525064",
+  appId:             "1:37286525064:web:ca6e0cf7c1d03c9a8b073d"
 };
 
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
 
-// Compress an image file to a base64 string under ~700KB
-function compressImage(file, maxW=460, maxH=215, quality=0.75) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = e => {
-      const img = new Image();
-      img.onerror = reject;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let w = img.width, h = img.height;
-        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-        if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+// ── State ──────────────────────────────────────────────────────────
+let currentUser    = null;
+let myUsername     = null;
+let currentServer  = null;
+let currentChannel = null;
+let currentInvite  = null;
+let inDM           = false;
+let currentDMUid   = null;
+let currentDMName  = null;
+let unsubMessages  = null;
+let unsubPresence  = null;
+
+// ── DOM refs ───────────────────────────────────────────────────────
+const serverHeader = document.getElementById('serverHeader');
+const chatHeader   = document.getElementById('chatHeader');
+const channelList  = document.getElementById('channelList');
+const messagesBox  = document.getElementById('messages');
+const onlineList   = document.getElementById('onlineList');
+const inviteBadge  = document.getElementById('inviteBadge');
+const loginError   = document.getElementById('loginError');
+
+
+// ══════════════════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════════════════
+
+function usernameToEmail(u) { return u.toLowerCase() + '@relink.local'; }
+
+async function signup() {
+  const u = document.getElementById('usernameInput').value.trim();
+  const p = document.getElementById('passwordInput').value;
+  loginError.textContent = '';
+  if (!u || !p) return (loginError.textContent = 'Enter a username and password.');
+  if (!/^[a-zA-Z0-9_]{2,24}$/.test(u))
+    return (loginError.textContent = 'Username: 2-24 chars, letters/numbers/_ only.');
+
+  const existing = await getDocs(query(collection(db, 'users'), where('username', '==', u)));
+  if (!existing.empty) return (loginError.textContent = 'Username already taken.');
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(u), p);
+    await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid });
+  } catch (e) {
+    loginError.textContent = e.message;
+  }
+}
+
+async function login() {
+  const u = document.getElementById('usernameInput').value.trim();
+  const p = document.getElementById('passwordInput').value;
+  loginError.textContent = '';
+  if (!u || !p) return (loginError.textContent = 'Enter a username and password.');
+  try {
+    await signInWithEmailAndPassword(auth, usernameToEmail(u), p);
+  } catch (e) {
+    loginError.textContent = 'Login failed — check your username and password.';
+  }
+}
+
+async function logout() {
+  await clearPresence();
+  await signOut(auth);
+}
+
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    currentUser = user;
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    myUsername = snap.exists() ? snap.data().username : user.email;
+    document.getElementById('myUsername').textContent = '@' + myUsername;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    await loadMyServers();
+    await loadDMList();
+  } else {
+    currentUser = null;
+    myUsername  = null;
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    if (unsubMessages) { unsubMessages(); unsubMessages = null; }
+    if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+  }
+});
+
+document.getElementById('logoutBtn').onclick = logout;
+
+
+// ══════════════════════════════════════════════════════════════════
+//  SERVERS
+// ══════════════════════════════════════════════════════════════════
+
+function randomInvite() { return Math.random().toString(36).slice(2, 10).toUpperCase(); }
+
+async function createOrJoinServer() {
+  if (confirm('Click OK to Create a new server, or Cancel to Join with an invite code.')) {
+    await createServer();
+  } else {
+    await joinByInvite();
+  }
+}
+
+async function createServer() {
+  const name = prompt('Server name:');
+  if (!name) return;
+  const invite = randomInvite();
+  const ref = await addDoc(collection(db, 'servers'), {
+    name, invite,
+    ownerUid: currentUser.uid,
+    members: [currentUser.uid],
+    createdAt: serverTimestamp()
+  });
+  alert(`Server created!\nInvite code: ${invite}\n(Share this with friends to join)`);
+  await loadMyServers();
+  selectServer(ref.id);
+}
+
+async function joinByInvite() {
+  const code = prompt('Paste invite code:');
+  if (!code) return;
+  const snap = await getDocs(query(collection(db, 'servers'), where('invite', '==', code.trim().toUpperCase())));
+  if (snap.empty) return alert('Invite code not found.');
+  const serverDoc = snap.docs[0];
+  const data = serverDoc.data();
+  if (data.members.includes(currentUser.uid)) {
+    alert('You are already in this server!');
+    selectServer(serverDoc.id);
+    return;
+  }
+  await updateDoc(doc(db, 'servers', serverDoc.id), { members: arrayUnion(currentUser.uid) });
+  alert('Joined server: ' + data.name);
+  await loadMyServers();
+  selectServer(serverDoc.id);
+}
+
+async function loadMyServers() {
+  if (!currentUser) return;
+  const snap = await getDocs(query(collection(db, 'servers'), where('members', 'array-contains', currentUser.uid)));
+
+  const col = document.getElementById('serversCol');
+  col.innerHTML = '';
+
+  const homeBtn = document.createElement('div');
+  homeBtn.className = 'server-btn';
+  homeBtn.textContent = 'R';
+  homeBtn.title = 'Direct Messages';
+  homeBtn.onclick = loadDMList;
+  col.appendChild(homeBtn);
+
+  snap.docs.forEach(d => {
+    const s = d.data();
+    const btn = document.createElement('div');
+    btn.className = 'server-btn' + (d.id === currentServer ? ' active' : '');
+    btn.textContent = s.name[0].toUpperCase();
+    btn.title = s.name;
+    btn.onclick = () => selectServer(d.id);
+    col.appendChild(btn);
+  });
+
+  const addBtn = document.createElement('div');
+  addBtn.className = 'server-btn create';
+  addBtn.textContent = '+';
+  addBtn.title = 'Create or Join Server';
+  addBtn.onclick = createOrJoinServer;
+  col.appendChild(addBtn);
+}
+
+async function selectServer(serverId) {
+  inDM = false;
+  currentServer  = serverId;
+  currentChannel = null;
+  currentDMUid   = null;
+  stopListeners();
+
+  const serverSnap = await getDoc(doc(db, 'servers', serverId));
+  const serverData = serverSnap.data();
+  serverHeader.textContent = serverData.name;
+  currentInvite = serverData.invite;
+  inviteBadge.style.display = 'inline';
+  inviteBadge.title = 'Invite code: ' + currentInvite + ' (click to copy)';
+
+  chatHeader.textContent = '# none';
+  channelList.innerHTML = '';
+  messagesBox.innerHTML = '';
+  onlineList.innerHTML  = '';
+  document.getElementById('addChannelBtn').style.display = 'inline-block';
+
+  const chSnap = await getDocs(query(collection(db, 'servers', serverId, 'channels'), orderBy('createdAt')));
+
+  if (chSnap.empty) {
+    await addDoc(collection(db, 'servers', serverId, 'channels'), { name: 'general', createdAt: serverTimestamp() });
+    selectServer(serverId);
+    return;
+  }
+
+  chSnap.docs.forEach(d => addChannelItem(d.data().name));
+  joinChannel(chSnap.docs[0].data().name);
+  loadMyServers();
+}
+
+function addChannelItem(name) {
+  const el = document.createElement('div');
+  el.className = 'channel-item' + (name === currentChannel ? ' active' : '');
+  el.textContent = '# ' + name;
+  el.onclick = () => joinChannel(name);
+  channelList.appendChild(el);
+}
+
+async function addChannel() {
+  if (!currentServer) return alert('Select a server first.');
+  const name = prompt('Channel name (no #):');
+  if (!name) return;
+  const clean = name.trim().toLowerCase().replace(/\s+/g, '-');
+  await addDoc(collection(db, 'servers', currentServer, 'channels'), { name: clean, createdAt: serverTimestamp() });
+  addChannelItem(clean);
+  joinChannel(clean);
+}
+
+document.getElementById('addChannelBtn').onclick = addChannel;
+document.getElementById('createServerBtn').onclick = createOrJoinServer;
+document.getElementById('homeBtn').onclick = loadDMList;
+
+inviteBadge.onclick = () => {
+  if (!currentInvite) return;
+  navigator.clipboard.writeText(currentInvite).then(() => alert('Invite code copied: ' + currentInvite));
+};
+
+
+// ══════════════════════════════════════════════════════════════════
+//  CHANNELS & REAL-TIME MESSAGES
+// ══════════════════════════════════════════════════════════════════
+
+function stopListeners() {
+  if (unsubMessages) { unsubMessages(); unsubMessages = null; }
+  if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+}
+
+function joinChannel(ch) {
+  stopListeners();
+  inDM = false;
+  currentChannel = ch;
+  chatHeader.textContent = '# ' + ch;
+  messagesBox.innerHTML  = '';
+  onlineList.innerHTML   = '';
+
+  Array.from(channelList.children).forEach(el => {
+    el.classList.toggle('active', el.textContent === '# ' + ch);
+  });
+
+  const msgsQ = query(
+    collection(db, 'servers', currentServer, 'channels', ch, 'messages'),
+    orderBy('ts'), limitToLast(100)
+  );
+  unsubMessages = onSnapshot(msgsQ, snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type === 'added') appendMessage(change.doc.data());
+    });
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+  });
+
+  updatePresence(currentServer, ch);
+  listenPresence(currentServer, ch);
+}
+
+function appendMessage(m) {
+  const isSelf = m.uid === currentUser?.uid;
+  const div  = document.createElement('div');
+  div.className = 'message' + (isSelf ? ' self' : '');
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const ts = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
+  meta.textContent = `${m.username} • ${ts}`;
+  const txt = document.createElement('div');
+  txt.textContent = m.text;
+  div.appendChild(meta);
+  div.appendChild(txt);
+  messagesBox.appendChild(div);
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+//  SEND MESSAGE
+// ══════════════════════════════════════════════════════════════════
+
+async function sendMessage() {
+  const text = document.getElementById('inputMsg').value.trim();
+  if (!text || !currentUser) return;
+  document.getElementById('inputMsg').value = '';
+
+  if (inDM && currentDMUid) { await sendDM(text); return; }
+  if (!currentServer || !currentChannel) return alert('Join a channel first.');
+
+  await addDoc(collection(db, 'servers', currentServer, 'channels', currentChannel, 'messages'), {
+    text, username: myUsername, uid: currentUser.uid, ts: serverTimestamp()
   });
 }
 
-// ── helpers to reach into the non-module global scope ───────────────────────
-const G = () => window.GAMES;
-const rebuild = () => { window.buildStoreGrid(window.currentFilter); window.buildLibrary?.(); };
-
-// ── Show a Firebase status badge in the nav ──────────────────────────────────
-const badge = document.createElement('div');
-badge.style.cssText = 'font-size:0.72rem;color:var(--text-muted);display:flex;align-items:center;gap:5px;margin-right:1rem;';
-badge.innerHTML = '<span id="fb-dot" style="width:7px;height:7px;border-radius:50%;background:#555;display:inline-block;"></span><span id="fb-label">Connecting…</span>';
-document.querySelector('.nav-actions').prepend(badge);
-const setFbStatus = (ok, label) => {
-  document.getElementById('fb-dot').style.background = ok ? '#5ba35c' : '#c0392b';
-  document.getElementById('fb-label').textContent = label;
-};
-
-// ── Real-time listener: pull community games from Firestore ──────────────────
-const gamesCol = collection(db, 'games');
-const q = query(gamesCol, orderBy('publishedAt', 'desc'));
-
-onSnapshot(q, (snapshot) => {
-  setFbStatus(true, 'Live');
-  snapshot.docChanges().forEach(change => {
-    if (change.type === 'added') {
-      const d = change.doc.data();
-      // Avoid adding duplicates
-      if (G().find(g => g.firestoreId === change.doc.id)) return;
-      const game = {
-        id: change.doc.id,
-        firestoreId: change.doc.id,
-        name: d.name,
-        emoji: d.emoji || '🎮',
-        coverUrl: d.coverUrl || null,
-        genre: d.genre,
-        tags: d.tags || [],
-        price: 0,
-        oldPrice: null,
-        desc: d.desc,
-        rating: 5.0,
-        reviews: '0',
-        dev: d.dev,
-        featured: false,
-        sale: false,
-        isUserGame: true,
-        status: d.status || 'released',
-      };
-      G().push(game);
-      rebuild();
-    }
-  });
-}, (err) => {
-  console.error('Firestore error:', err);
-  setFbStatus(false, 'Offline');
+document.getElementById('sendBtn').onclick = sendMessage;
+document.getElementById('inputMsg').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-// ── Override publishGame to write to Firebase ────────────────────────────────
-window.publishGame = async function () {
-  const title   = document.getElementById('pub-title').value.trim();
-  const desc    = document.getElementById('pub-desc').value.trim();
-  const genre   = document.getElementById('pub-genre').value;
-  const dev     = document.getElementById('pub-dev').value.trim();
-  const status  = document.getElementById('pub-status').value;
-  const EMOJIS  = ['🎮','👾','🕹️','⚡','🔥','💎','🌟','🏆','🛸','🧿'];
 
-  const btn = document.getElementById('publish-btn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Uploading…';
+// ══════════════════════════════════════════════════════════════════
+//  PRESENCE
+// ══════════════════════════════════════════════════════════════════
 
-  try {
-    // 1. Compress + convert cover image to base64 (if any)
-    let coverUrl = null;
-    const fileInput = document.getElementById('cover-file');
-    if (fileInput.files[0]) {
-      const file = fileInput.files[0];
-      if (file.size > 5 * 1024 * 1024) {
-        throw new Error('Image too large — please use an image under 5MB.');
-      }
-      coverUrl = await compressImage(file);
-      // Safety check — Firestore doc limit is ~1MB
-      if (coverUrl.length > 900000) {
-        coverUrl = await compressImage(file, 460, 215, 0.5);
-      }
-    }
+async function updatePresence(serverId, channelId) {
+  if (!currentUser) return;
+  await setDoc(doc(db, 'servers', serverId, 'presence', currentUser.uid),
+    { username: myUsername, channelId, ts: serverTimestamp() });
+}
 
-    // 2. Write game doc to Firestore
-    await addDoc(gamesCol, {
-      name: title,
-      desc,
-      genre,
-      dev,
-      price: 0,
-      status,
-      coverUrl,
-      tags: window.pubTags || [],
-      emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-      publishedAt: serverTimestamp(),
+async function clearPresence() {
+  if (!currentUser || !currentServer) return;
+  try { await deleteDoc(doc(db, 'servers', currentServer, 'presence', currentUser.uid)); } catch (_) {}
+}
+
+function listenPresence(serverId, channelId) {
+  if (unsubPresence) unsubPresence();
+  unsubPresence = onSnapshot(collection(db, 'servers', serverId, 'presence'), snap => {
+    const users = snap.docs
+      .filter(d => d.data().channelId === channelId)
+      .map(d => d.data().username);
+    onlineList.innerHTML = users.map(u => `<li>🟢 ${u}</li>`).join('');
+  });
+}
+
+window.addEventListener('beforeunload', clearPresence);
+
+// ── Login button wiring (must use addEventListener in module scope) ─
+document.getElementById('loginBtn').addEventListener('click', login);
+document.getElementById('signupBtn').addEventListener('click', signup);
+
+
+// ══════════════════════════════════════════════════════════════════
+//  DIRECT MESSAGES
+// ══════════════════════════════════════════════════════════════════
+
+function dmId(uid1, uid2) { return [uid1, uid2].sort().join('_'); }
+
+async function loadDMList() {
+  stopListeners();
+  inDM = true;
+  currentServer  = null;
+  currentChannel = null;
+  currentDMUid   = null;
+  currentInvite  = null;
+
+  serverHeader.textContent = 'Direct Messages';
+  inviteBadge.style.display = 'none';
+  chatHeader.textContent = 'DMs';
+  channelList.innerHTML  = '';
+  messagesBox.innerHTML  = '';
+  onlineList.innerHTML   = '';
+  document.getElementById('addChannelBtn').style.display = 'none';
+
+  const newBtn = document.createElement('div');
+  newBtn.className = 'channel-item';
+  newBtn.style.fontWeight = 'bold';
+  newBtn.textContent = '+ New DM';
+  newBtn.onclick = startNewDM;
+  channelList.appendChild(newBtn);
+
+  const partnerSnap = await getDoc(doc(db, 'userDMs', currentUser.uid));
+  if (partnerSnap.exists()) {
+    Object.entries(partnerSnap.data()).forEach(([uid, uname]) => {
+      const el = document.createElement('div');
+      el.className = 'channel-item';
+      el.textContent = uname;
+      el.onclick = () => openDM(uid, uname);
+      channelList.appendChild(el);
     });
-
-    // 3. Show success (real-time listener will auto-add it to the store)
-    document.getElementById('publish-form-area').style.display = 'none';
-    const success = document.getElementById('publish-success');
-    success.style.display = 'block';
-    document.getElementById('success-msg').textContent =
-      `"${title}" is now live for everyone on Vapor! 🌍`;
-
-    window.showToast('🚀 Published to Vapor!');
-  } catch (err) {
-    console.error('Publish failed:', err);
-    window.showToast('❌ Publish failed: ' + err.message);
-    btn.disabled = false;
-    btn.textContent = '🚀 Publish to Store';
   }
-};
+
+  loadMyServers();
+}
+
+async function startNewDM() {
+  const targetName = prompt('Enter the username to DM:');
+  if (!targetName) return;
+
+  const snap = await getDocs(query(collection(db, 'users'), where('username', '==', targetName.trim())));
+  if (snap.empty) return alert('User "' + targetName + '" not found.');
+  const targetDoc = snap.docs[0];
+  const targetUid = targetDoc.data().uid;
+  const targetUsername = targetDoc.data().username;
+
+  if (targetUid === currentUser.uid) return alert("That's you!");
+
+  await setDoc(doc(db, 'userDMs', currentUser.uid), { [targetUid]: targetUsername }, { merge: true });
+  await setDoc(doc(db, 'userDMs', targetUid), { [currentUser.uid]: myUsername }, { merge: true });
+
+  openDM(targetUid, targetUsername);
+}
+
+function openDM(uid, username) {
+  stopListeners();
+  inDM = true;
+  currentDMUid  = uid;
+  currentDMName = username;
+  chatHeader.textContent = 'DM with ' + username;
+  messagesBox.innerHTML = '';
+  onlineList.innerHTML  = '';
+
+  Array.from(channelList.children).forEach(el => {
+    el.classList.toggle('active', el.textContent === username);
+  });
+
+  const id = dmId(currentUser.uid, uid);
+  const dmQ = query(collection(db, 'dms', id, 'messages'), orderBy('ts'), limitToLast(100));
+  unsubMessages = onSnapshot(dmQ, snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type === 'added') appendDM(change.doc.data());
+    });
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+  });
+}
+
+async function sendDM(text) {
+  const id = dmId(currentUser.uid, currentDMUid);
+  await addDoc(collection(db, 'dms', id, 'messages'), {
+    from: myUsername, fromUid: currentUser.uid,
+    to: currentDMName, toUid: currentDMUid,
+    text, ts: serverTimestamp()
+  });
+  await setDoc(doc(db, 'userDMs', currentUser.uid), { [currentDMUid]: currentDMName }, { merge: true });
+  await setDoc(doc(db, 'userDMs', currentDMUid), { [currentUser.uid]: myUsername }, { merge: true });
+}
+
+function appendDM(m) {
+  const isSelf = m.fromUid === currentUser?.uid;
+  const div  = document.createElement('div');
+  div.className = 'message' + (isSelf ? ' self' : '');
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const ts = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
+  meta.textContent = `${m.from} • ${ts}`;
+  const txt = document.createElement('div');
+  txt.textContent = m.text;
+  div.appendChild(meta);
+  div.appendChild(txt);
+  messagesBox.appendChild(div);
+}
 </script>
 </body>
 </html>
