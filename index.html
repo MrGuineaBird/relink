@@ -738,15 +738,17 @@ async function loadMyServers() {
   if (!currentUser) return;
   const snap = await getDocs(query(collection(db, 'servers'), where('members', 'array-contains', currentUser.uid)));
 
-  const col = document.getElementById('serversCol');
-  col.innerHTML = '';
-
-  const homeBtn = document.createElement('div');
-  homeBtn.className = 'server-btn';
-  homeBtn.textContent = 'R';
-  homeBtn.title = 'Direct Messages';
-  homeBtn.onclick = loadDMList;
-  col.appendChild(homeBtn);
+  // Only rebuild the server icon buttons — leave profile bar intact
+  let iconsContainer = document.getElementById('serverIconsList');
+  if (!iconsContainer) {
+    iconsContainer = document.createElement('div');
+    iconsContainer.id = 'serverIconsList';
+    iconsContainer.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;width:100%';
+    // Insert after homeBtn
+    const homeBtn = document.getElementById('homeBtn');
+    homeBtn.insertAdjacentElement('afterend', iconsContainer);
+  }
+  iconsContainer.innerHTML = '';
 
   snap.docs.forEach(d => {
     const s = d.data();
@@ -759,19 +761,11 @@ async function loadMyServers() {
       btn.textContent = s.name[0].toUpperCase();
     }
     btn.onclick = () => selectServer(d.id);
-    // Right-click only for owner
     if (s.ownerUid === currentUser.uid) {
       btn.addEventListener('contextmenu', e => showCtxMenu(e, d.id, s));
     }
-    col.appendChild(btn);
+    iconsContainer.appendChild(btn);
   });
-
-  const addBtn = document.createElement('div');
-  addBtn.className = 'server-btn create';
-  addBtn.textContent = '+';
-  addBtn.title = 'Create or Join Server';
-  addBtn.onclick = createOrJoinServer;
-  col.appendChild(addBtn);
 }
 
 async function selectServer(serverId) {
