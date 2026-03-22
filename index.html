@@ -50,7 +50,8 @@
     .messages { flex:1; padding:16px; overflow:auto; background:var(--bg) }
 
     /* Messages */
-    .message { display:flex; gap:12px; margin-bottom:16px; align-items:flex-start }
+    .message { position:relative; display:flex; flex-direction:column; margin-bottom:16px }
+    .msg-row { display:flex; gap:12px; align-items:flex-start }
     .msg-avatar { width:38px; height:38px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; flex-shrink:0; overflow:hidden }
     .msg-avatar img { width:100%; height:100%; object-fit:cover }
     .msg-body { flex:1; min-width:0 }
@@ -58,8 +59,17 @@
     .msg-name { font-weight:600; font-size:14px; color:var(--text) }
     .msg-time { font-size:11px; color:var(--text-muted) }
     .msg-text { font-size:14px; color:var(--text); word-break:break-word; line-height:1.5 }
-    .msg-img { max-width:360px; max-height:300px; border-radius:8px; margin-top:6px; display:block; cursor:pointer }
+    .msg-img { max-width:360px; max-height:300px; border-radius:8px; margin-top:6px; display:block; cursor:zoom-in }
     .msg-img:hover { opacity:.9 }
+
+    /* Image lightbox */
+    .lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; cursor:zoom-out }
+    .lightbox.open { display:flex }
+    .lightbox img { max-width:90vw; max-height:90vh; object-fit:contain; border-radius:8px; box-shadow:0 8px 40px rgba(0,0,0,0.6); cursor:default }
+    .lightbox-close { position:fixed; top:16px; right:20px; background:none; border:none; color:#fff; font-size:28px; cursor:pointer; opacity:0.7; line-height:1; z-index:1001 }
+    .lightbox-close:hover { opacity:1 }
+    .lightbox-open-btn { position:fixed; top:16px; right:56px; background:none; border:none; color:#fff; font-size:18px; cursor:pointer; opacity:0.7; z-index:1001; text-decoration:none }
+    .lightbox-open-btn:hover { opacity:1 }
 
     /* Composer */
     .composer { display:flex; flex-direction:column; background:var(--panel); border-top:1px solid #242629 }
@@ -194,6 +204,34 @@
     .verify-btn-logout:hover { color:var(--text) }
     #verifyMsg { font-size:13px; margin-top:10px; min-height:18px }
 
+    /* SVG icon helper */
+    .ri    { width:18px; height:18px; filter:invert(1); vertical-align:middle; display:inline-block; flex-shrink:0 }
+    .ri-sm { width:14px; height:14px; filter:invert(1); vertical-align:middle; display:inline-block; flex-shrink:0 }
+    .ri-lg { width:22px; height:22px; filter:invert(1); vertical-align:middle; display:inline-block; flex-shrink:0 }
+    .ri-xl { width:42px; height:42px; filter:invert(1); display:inline-block }
+
+    /* Custom SVG icons */
+    .ri-icon, .ri { width:18px; height:18px; display:inline-block; vertical-align:middle; filter:brightness(0) invert(1); pointer-events:none }
+    .ri-icon-sm, .ri-sm { width:14px; height:14px; display:inline-block; vertical-align:middle; filter:brightness(0) invert(1); pointer-events:none }
+    .ri-icon-lg, .ri-lg { width:22px; height:22px; display:inline-block; vertical-align:middle; filter:brightness(0) invert(1); pointer-events:none }
+    .ri-xl { width:48px; height:48px; display:inline-block; vertical-align:middle; filter:brightness(0) invert(1); pointer-events:none }
+
+    /* Friend requests */
+    .friend-item { display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:8px; transition:background .15s }
+    .friend-item:hover { background:rgba(255,255,255,0.06) }
+    .friend-item-avatar { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; overflow:hidden; flex-shrink:0 }
+    .friend-item-avatar img { width:100%; height:100%; object-fit:cover }
+    .friend-item-name { flex:1; font-size:13px; font-weight:600 }
+    .friend-item-actions { display:flex; gap:6px }
+    .friend-btn { padding:4px 10px; border-radius:6px; border:none; font-size:12px; font-weight:600; cursor:pointer; transition:background .2s }
+    .friend-btn-accept { background:#3ba55c; color:#fff }
+    .friend-btn-accept:hover { background:#2d8a4a }
+    .friend-btn-decline { background:#ed4245; color:#fff }
+    .friend-btn-decline:hover { background:#c0373a }
+    .friend-btn-add { background:var(--accent); color:#fff }
+    .friend-btn-add:hover { background:var(--accent-hover) }
+    .friend-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); padding:8px 8px 4px }
+
     /* Invite badge */
     .invite-badge { font-size:11px; background:var(--panel); padding:2px 6px; border-radius:4px; color:var(--text-muted); cursor:pointer; margin-left:4px }
     .invite-badge:hover { background:var(--accent) }
@@ -322,6 +360,8 @@
     .vc-participant-avatar img { width:100%; height:100%; object-fit:cover }
     .vc-participant.speaking { color:var(--text) }
     .vc-participant.speaking .vc-participant-avatar { box-shadow:0 0 0 2px #3ba55c }
+    .vc-participant.muted .vc-participant-avatar { box-shadow:0 0 0 2px #ed4245 }
+    .vc-mute-icon { font-size:10px; margin-left:auto; opacity:0.8 }
 
     /* VC active bar (bottom of sidebar) */
     .vc-active-bar { background:#1a2a1a; border-top:1px solid #2d4a2d; padding:8px 10px; font-size:12px; display:none }
@@ -423,7 +463,7 @@
 <!-- Email Verification Screen -->
 <div id="verifyScreen">
   <div class="verify-box">
-    <div class="verify-icon">📧</div>
+    <div class="verify-icon"><img class="ri-xl" src="relinkicons/email.svg" alt="email"></div>
     <h2>Check your email</h2>
     <p>We sent a verification link to<br><span class="verify-email" id="verifyEmailAddr"></span><br><br>Click the link in the email to verify your account, then come back here.</p>
     <div class="verify-actions">
@@ -442,30 +482,34 @@
       <div class="server-btn" id="homeBtn" title="Direct Messages" style="margin-top:4px">R</div>
       <div class="notif-badge hidden" id="dmBadge"></div>
     </div>
+    <div class="notif-wrap">
+      <div class="server-btn" id="friendsBtn" title="Friends" style="font-size:20px">👥</div>
+      <div class="notif-badge hidden" id="friendReqBadge"></div>
+    </div>
     <div class="server-btn create" id="createServerBtn" title="Create or Join Server">+</div>
     <div class="profile-bar">
       <div class="profile-avatar" id="profileAvatarBtn" title="Your profile"></div>
-      <button class="profile-settings-btn" id="profileSettingsBtn" title="User Settings">⚙️</button>
+      <button class="profile-settings-btn" id="profileSettingsBtn" title="User Settings"><img class="ri" src="relinkicons/settings.svg" alt="settings"></button>
     </div>
   </div>
 
   <div class="server-panel" id="serverPanel">
     <div class="server-header">
       <span id="serverHeader">No server</span>
-      <span id="inviteBadge" class="invite-badge" title="Copy invite code" style="display:none">📋 invite</span>
+      <span id="inviteBadge" class="invite-badge" title="Copy invite code" style="display:none"><img class="ri-sm" src="relinkicons/copy.svg" alt="copy"> invite</span>
     </div>
     <div class="channel-list" id="channelList"></div>
     <div class="vc-active-bar" id="vcActiveBar">
       <div class="vc-active-bar-top">
         <div>
-          <div class="vc-active-bar-name" id="vcActiveBarName">🔊 Voice Connected</div>
+          <div class="vc-active-bar-name" id="vcActiveBarName"><img class="ri-sm" src="relinkicons/voiceconnected.svg" alt="vc"> Voice Connected</div>
           <div class="vc-active-bar-server" id="vcActiveBarServer"></div>
         </div>
       </div>
       <div class="vc-controls">
-        <button class="vc-ctrl-btn" id="vcMuteBtn" title="Mute">🎤 Mute</button>
-        <button class="vc-ctrl-btn" id="vcShareBtn" title="Share Screen">🖥️ Share</button>
-        <button class="vc-ctrl-btn leave" id="vcLeaveBtn">📴 Leave</button>
+        <button class="vc-ctrl-btn" id="vcMuteBtn" title="Mute"><img class="ri-sm" src="relinkicons/mutebutton.svg" alt="mute"> Mute</button>
+        <button class="vc-ctrl-btn" id="vcShareBtn" title="Share Screen"><img class="ri-sm" src="relinkicons/screenshare.svg" alt="share"> Share</button>
+        <button class="vc-ctrl-btn leave" id="vcLeaveBtn"><img class="ri-sm" src="relinkicons/leavevc.svg" alt="leave"> Leave</button>
       </div>
     </div>
     <div class="channel-actions">
@@ -475,7 +519,7 @@
   </div>
 
   <div class="chat">
-    <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between"><span id="chatHeaderText"># none</span><button id="dmCallBtn" style="display:none;background:none;border:none;color:#3ba55c;cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px" title="Start voice call">📞</button></div>
+    <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between"><span id="chatHeaderText"># none</span><button id="dmCallBtn" style="display:none;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px" title="Start voice call"><img class="ri" src="relinkicons/call.svg" alt="call" style="filter:invert(1) sepia(1) saturate(3) hue-rotate(90deg)"></button></div>
     <!-- DM Call panel — inline above messages -->
     <div class="dm-call-panel" id="dmCallOverlay">
       <div class="dm-call-share-grid" id="dmCallShareGrid"></div>
@@ -493,9 +537,9 @@
         </div>
         <div class="dm-call-status" id="dmCallStatus">Calling…</div>
         <div class="dm-call-controls">
-          <button class="dm-call-btn" id="dmCallMuteBtn" title="Mute">🎤</button>
-          <button class="dm-call-btn" id="dmCallShareBtn" title="Share Screen" style="display:none">🖥️</button>
-          <button class="dm-call-btn end" id="dmCallEndBtn" title="End call">📵</button>
+          <button class="dm-call-btn" id="dmCallMuteBtn" title="Mute"><img class="ri" src="relinkicons/mutebutton.svg" alt="mute"></button>
+          <button class="dm-call-btn" id="dmCallShareBtn" title="Share Screen" style="display:none"><img class="ri" src="relinkicons/screenshare.svg" alt="share"></button>
+          <button class="dm-call-btn end" id="dmCallEndBtn" title="End call"><img class="ri" src="relinkicons/endcall.svg" alt="end call"></button>
         </div>
       </div>
     </div>
@@ -532,6 +576,34 @@
 </div>
 
 
+<!-- Image Lightbox -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightboxClose">×</button>
+  <a class="lightbox-open-btn" id="lightboxOpenBtn" target="_blank" title="Open in new tab">⧉</a>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<!-- Friends Modal -->
+<div class="modal-overlay" id="friendsModal">
+  <div class="modal" style="width:420px;max-height:80vh;display:flex;flex-direction:column">
+    <button class="modal-close" id="friendsModalClose">×</button>
+    <h2>Friends</h2>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input type="text" id="friendAddInput" placeholder="Add by username…" style="flex:1;padding:9px 12px;border-radius:8px;border:none;background:#0b0c0d;color:var(--text);font-size:14px;outline:none">
+      <button class="modal-confirm" id="friendAddBtn" style="padding:0 16px;border-radius:8px">Add</button>
+    </div>
+    <div id="friendAddMsg" style="font-size:13px;margin-bottom:10px;min-height:16px"></div>
+    <div style="flex:1;overflow-y:auto">
+      <div id="friendReqsSection" style="display:none">
+        <div class="friend-section-title">Pending Requests</div>
+        <div id="friendReqsList"></div>
+      </div>
+      <div class="friend-section-title">Friends</div>
+      <div id="friendsList"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Emoji Picker -->
 <div class="emoji-picker" id="emojiPicker">
   <button class="emoji-btn" data-emoji="👍">👍</button>
@@ -550,9 +622,9 @@
 
 <!-- Channel Context Menu -->
 <div class="ctx-menu" id="channelCtxMenu">
-  <div class="ctx-item" id="chCtxRename">✏️ Rename Channel</div>
+  <div class="ctx-item" id="chCtxRename"><img class="ri-sm" src="relinkicons/rename.svg" alt="rename"> Rename Channel</div>
   <div class="ctx-divider"></div>
-  <div class="ctx-item danger" id="chCtxDelete">🗑️ Delete Channel</div>
+  <div class="ctx-item danger" id="chCtxDelete"><img class="ri-sm" src="relinkicons/delete.svg" alt="delete"> Delete Channel</div>
 </div>
 
 <!-- DM Call Overlay -->
@@ -617,9 +689,9 @@
 
 <!-- Right-click context menu -->
 <div class="ctx-menu" id="ctxMenu">
-  <div class="ctx-item" id="ctxEdit">✏️ Edit Server</div>
+  <div class="ctx-item" id="ctxEdit"><img class="ri-sm" src="relinkicons/rename.svg" alt="edit"> Edit Server</div>
   <div class="ctx-divider"></div>
-  <div class="ctx-item danger" id="ctxDelete">🗑️ Delete Server</div>
+  <div class="ctx-item danger" id="ctxDelete"><img class="ri-sm" src="relinkicons/delete.svg" alt="delete"> Delete Server</div>
 </div>
 
 <!-- Edit Server Modal -->
@@ -859,6 +931,7 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('app').style.display = 'flex';
     await loadMyServers();
     await loadDMList();
+    listenFriendRequests();
   } else {
     currentUser = null;
     myUsername  = null;
@@ -1454,55 +1527,15 @@ function isMentioned(text) {
 }
 
 function appendMessage(m, msgId) {
-  if (document.getElementById('msg-' + msgId)) return; // already rendered
+  if (document.getElementById('msg-' + msgId)) return;
 
   const div = document.createElement('div');
   div.className = 'message';
   div.id = 'msg-' + msgId;
   if (isMentioned(m.text)) div.classList.add('mentioned');
 
-  // Reply quote — Discord style
-  if (m.replyTo) {
-    const quote = document.createElement('div');
-    quote.className = 'msg-reply-quote';
-
-    // Curved connector line
-    const curve = document.createElement('div');
-    curve.className = 'msg-reply-curve';
-    quote.appendChild(curve);
-
-    // Mini avatar of the person being replied to
-    const miniAv = document.createElement('div');
-    miniAv.className = 'msg-reply-mini-avatar';
-    if (m.replyTo.avatar) { miniAv.innerHTML = `<img src="${m.replyTo.avatar}" alt="">`; }
-    else { miniAv.textContent = (m.replyTo.displayName || m.replyTo.username || '?')[0].toUpperCase(); }
-    quote.appendChild(miniAv);
-
-    // Name
-    const rName = document.createElement('span');
-    rName.className = 'msg-reply-name';
-    rName.textContent = m.replyTo.displayName || m.replyTo.username;
-    quote.appendChild(rName);
-
-    // Quoted text
-    const rText = document.createElement('span');
-    rText.className = 'msg-reply-text';
-    rText.textContent = m.replyTo.text || '📷 image';
-    quote.appendChild(rText);
-
-    quote.onclick = () => {
-      const orig = document.getElementById('msg-' + m.replyTo.id);
-      if (orig) {
-        orig.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        orig.style.outline = '2px solid var(--accent)';
-        setTimeout(() => orig.style.outline = '', 1500);
-      }
-    };
-    div.appendChild(quote);
-  }
-
   const msgRow = document.createElement('div');
-  msgRow.style.cssText = 'display:flex;gap:12px;align-items:flex-start';
+  msgRow.className = 'msg-row';
 
   // Avatar
   const av = document.createElement('div');
@@ -1528,6 +1561,38 @@ function appendMessage(m, msgId) {
   if (m.edited) { const ed = document.createElement('span'); ed.className = 'msg-time'; ed.textContent = ' (edited)'; time.appendChild(ed); }
   meta.appendChild(name);
   meta.appendChild(time);
+  body.appendChild(meta);
+
+  // Reply quote — sits inside body, below the name/time row
+  if (m.replyTo) {
+    const quote = document.createElement('div');
+    quote.className = 'msg-reply-quote';
+    const curve = document.createElement('div');
+    curve.className = 'msg-reply-curve';
+    quote.appendChild(curve);
+    const miniAv = document.createElement('div');
+    miniAv.className = 'msg-reply-mini-avatar';
+    if (m.replyTo.avatar) { miniAv.innerHTML = `<img src="${m.replyTo.avatar}" alt="">`; }
+    else { miniAv.textContent = (m.replyTo.displayName || m.replyTo.username || '?')[0].toUpperCase(); }
+    quote.appendChild(miniAv);
+    const rName = document.createElement('span');
+    rName.className = 'msg-reply-name';
+    rName.textContent = m.replyTo.displayName || m.replyTo.username;
+    quote.appendChild(rName);
+    const rText = document.createElement('span');
+    rText.className = 'msg-reply-text';
+    rText.textContent = m.replyTo.text || '📷 image';
+    quote.appendChild(rText);
+    quote.onclick = () => {
+      const orig = document.getElementById('msg-' + m.replyTo.id);
+      if (orig) {
+        orig.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        orig.style.outline = '2px solid var(--accent)';
+        setTimeout(() => orig.style.outline = '', 1500);
+      }
+    };
+    body.appendChild(quote);
+  }
 
   const txt = document.createElement('div');
   txt.className = 'msg-text';
@@ -1539,7 +1604,7 @@ function appendMessage(m, msgId) {
   if (m.image) {
     const img = document.createElement('img');
     img.className = 'msg-img'; img.src = m.image; img.alt = 'image';
-    img.onclick = () => window.open(m.image, '_blank');
+    img.onclick = () => openLightbox(m.image);
     body.appendChild(img);
   }
 
@@ -1558,8 +1623,8 @@ function appendMessage(m, msgId) {
   actions.appendChild(replyBtn);
   actions.appendChild(reactBtn);
   if (m.uid === currentUser?.uid) {
-    const editBtn  = makeActionBtn('✏️', 'Edit',   () => startEdit(msgId, m, txt));
-    const delBtn   = makeActionBtn('🗑️', 'Delete', () => deleteMessage(msgId));
+    const editBtn  = makeActionBtn('<img class="ri-sm" src="relinkicons/rename.svg" alt="edit">', 'Edit', () => startEdit(msgId, m, txt));
+    const delBtn   = makeActionBtn('<img class="ri-sm" src="relinkicons/delete.svg" alt="delete">', 'Delete', () => deleteMessage(msgId));
     actions.appendChild(editBtn);
     actions.appendChild(delBtn);
   }
@@ -1580,11 +1645,11 @@ function appendMessage(m, msgId) {
   }
 }
 
-function makeActionBtn(icon, title, handler) {
+function makeActionBtn(iconOrHtml, title, handler) {
   const btn = document.createElement('button');
   btn.className = 'msg-action-btn';
   btn.title = title;
-  btn.textContent = icon;
+  btn.innerHTML = iconOrHtml;
   btn.onclick = handler;
   return btn;
 }
@@ -1998,6 +2063,24 @@ async function sendMessage() {
   await addDoc(collection(db, 'servers', currentServer, 'channels', currentChannel, 'messages'), msgData);
 }
 
+// ── Lightbox ───────────────────────────────────────────────────────
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightboxOpenBtn').href = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightboxImg').src = '';
+}
+document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
+document.getElementById('lightbox').addEventListener('click', e => {
+  if (e.target === document.getElementById('lightbox')) closeLightbox();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
 document.getElementById('sendBtn').onclick = sendMessage;
 document.getElementById('inputMsg').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -2330,7 +2413,7 @@ function stopVAD(uid) {
 function addVcChannelItem(name) {
   const el = document.createElement('div');
   el.className = 'vc-item' + (name === currentVcChannel ? ' active' : '');
-  el.innerHTML = `<span class="vc-item-icon">🔊</span><span>${name.replace(/^vc-/, '')}</span>`;
+  el.innerHTML = `<img class="ri-sm" src="relinkicons/voiceconnected.svg" alt="vc"><span>${name.replace(/^vc-/, '')}</span>`;
   el.dataset.vcName = name;
   el.onclick = () => joinVoiceChannel(name);
   channelList.appendChild(el);
@@ -2346,7 +2429,7 @@ function addVcChannelItem(name) {
       const p = d.data();
       vcParticipantData[p.uid] = p;
       const row = document.createElement('div');
-      row.className = 'vc-participant';
+      row.className = 'vc-participant' + (p.muted ? ' muted' : '');
       row.id = 'vc-row-' + p.uid;
       const av = document.createElement('div');
       av.className = 'vc-participant-avatar';
@@ -2354,11 +2437,19 @@ function addVcChannelItem(name) {
       else av.textContent = (p.displayName || p.username || '?')[0].toUpperCase();
       const nm = document.createElement('span');
       nm.textContent = p.displayName || p.username;
-      row.appendChild(av); row.appendChild(nm);
+      row.appendChild(av);
+      row.appendChild(nm);
+      if (p.muted) {
+        const muteIcon = document.createElement('span');
+        muteIcon.className = 'vc-mute-icon';
+        muteIcon.innerHTML = '<img class="ri-sm" src="relinkicons/muted.svg" alt="muted">';
+        muteIcon.title = 'Muted';
+        row.appendChild(muteIcon);
+      }
       partEl.appendChild(row);
       if (activeTiles[p.uid]) {
         const label = activeTiles[p.uid].querySelector('.screenshare-tile-label');
-        if (label) label.textContent = '🖥️ ' + (p.displayName || p.username);
+        if (label) label.innerHTML = '<img class="ri-sm" src="relinkicons/screenshare.svg" alt="share"> ' + (p.displayName || p.username);
       }
     });
     const activeUids = new Set(snap.docs.map(d => d.id));
@@ -2403,7 +2494,7 @@ async function joinVoiceChannel(name) {
     el.classList.toggle('active', el.dataset.vcName === name);
   });
   document.getElementById('vcActiveBar').classList.add('visible');
-  document.getElementById('vcActiveBarName').textContent = '🔊 ' + name.replace(/^vc-/, '');
+  document.getElementById('vcActiveBarName').innerHTML = '<img class="ri-sm" src="relinkicons/voiceconnected.svg" alt="vc"> ' + name.replace(/^vc-/, '');
   document.getElementById('vcActiveBarServer').textContent = serverHeader.textContent;
 
   // Fetch existing participants and call those with LOWER uid (prevents double-offer)
@@ -2575,7 +2666,7 @@ function addShareTile(uid, stream, isSelf) {
     : row
       ? row.querySelector('span')?.textContent
       : (isSelf ? (myDisplayName || myUsername) : uid);
-  label.textContent = '🖥️ ' + (name || uid);
+  label.innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon-sm" style="margin-right:4px">' + (name || uid);
   tile.appendChild(label);
 
   // Fullscreen button
@@ -2631,7 +2722,6 @@ async function leaveVoiceChannel() {
   if (unsubSignals) { unsubSignals(); unsubSignals = null; }
 
   try { await deleteDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid)); } catch (_) {}
-
   Object.values(peerConnections).forEach(pc => pc.close());
   Object.keys(peerConnections).forEach(k => { stopVAD(k); delete peerConnections[k]; });
   Object.keys(iceQueues).forEach(k => delete iceQueues[k]);
@@ -2645,17 +2735,25 @@ async function leaveVoiceChannel() {
   document.getElementById('vcActiveBar').classList.remove('visible');
   document.querySelectorAll('.vc-item').forEach(el => el.classList.remove('active'));
   isMuted = false;
-  document.getElementById('vcMuteBtn').textContent = '🎤 Mute';
+  document.getElementById('vcMuteBtn').innerHTML = '<img src="relinkicons/mutebutton.svg" class="ri-icon"> Mute';
   document.getElementById('vcMuteBtn').classList.remove('active');
 }
 
-document.getElementById('vcMuteBtn').addEventListener('click', () => {
+document.getElementById('vcMuteBtn').addEventListener('click', async () => {
   if (!localStream) return;
   isMuted = !isMuted;
   localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
   const btn = document.getElementById('vcMuteBtn');
-  btn.textContent = isMuted ? '🔇 Unmute' : '🎤 Mute';
+  btn.innerHTML = isMuted ? '<img src="relinkicons/muted.svg" class="ri-icon"> Unmute' : '<img src="relinkicons/mutebutton.svg" class="ri-icon"> Mute';
   btn.classList.toggle('active', isMuted);
+  // Sync mute state to Firestore so others can see it
+  if (currentServer && currentVcChannel && currentUser) {
+    try {
+      await updateDoc(doc(db, 'servers', currentServer, 'vc', currentVcChannel, 'participants', currentUser.uid), {
+        muted: isMuted
+      });
+    } catch (_) {}
+  }
 });
 
 document.getElementById('vcShareBtn').addEventListener('click', async () => {
@@ -2663,7 +2761,11 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
   if (!currentVcChannel) return alert('Join a voice channel first.');
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
+      video: {
+        frameRate: { ideal: 60, max: 60 },
+        width:     { ideal: 1920 },
+        height:    { ideal: 1080 }
+      },
       audio: {
         echoCancellation: false,
         noiseSuppression: false,
@@ -2673,7 +2775,7 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
   } catch (e) { return; }
 
   isSharing = true;
-  document.getElementById('vcShareBtn').textContent = '🛑 Stop';
+  document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon" style="opacity:.5"> Stop';
   document.getElementById('vcShareBtn').classList.add('active');
 
   addShareTile(currentUser.uid, screenStream, true);
@@ -2689,12 +2791,19 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
     } else {
       pc.addTrack(videoTrack, screenStream);
     }
-    // Add system audio as a separate track if available
+    // Bump video bitrate for higher quality / FPS
+    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) {
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+      params.encodings[0].maxBitrate = 8_000_000; // 8 Mbps
+      params.encodings[0].maxFramerate = 60;
+      try { await sender.setParameters(params); } catch (_) {}
+    }
     if (audioTrack) {
       const audioSender = pc.getSenders().find(s => s.track?.id === audioTrack.id);
       if (!audioSender) pc.addTrack(audioTrack, screenStream);
     }
-    // Renegotiate
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
@@ -2732,7 +2841,7 @@ async function stopScreenShare() {
     } catch (_) {}
   }
 
-  document.getElementById('vcShareBtn').textContent = '🖥️ Share';
+  document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon"> Share';
   document.getElementById('vcShareBtn').classList.remove('active');
 }
 
@@ -3029,7 +3138,7 @@ async function endDMCall(writeEnd = true) {
   document.getElementById('dmCallShareBtn').style.display = 'none';
   document.getElementById('dmCallShareBtn').classList.remove('active');
   dmCallMuted = false;
-  document.getElementById('dmCallMuteBtn').textContent = '🎤';
+  document.getElementById('dmCallMuteBtn').innerHTML = '<img src="relinkicons/mutebutton.svg" class="ri-icon">';
   document.getElementById('dmCallMuteBtn').classList.remove('active');
 
   if (writeEnd && dmCallPartnerId) {
@@ -3110,7 +3219,14 @@ document.getElementById('dmCallShareBtn').addEventListener('click', async () => 
   if (dmIsSharing) { stopDMShare(); return; }
   if (!dmCallPc) return;
   try {
-    dmScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { echoCancellation: false, noiseSuppression: false } });
+    dmScreenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        frameRate: { ideal: 60, max: 60 },
+        width:     { ideal: 1920 },
+        height:    { ideal: 1080 }
+      },
+      audio: { echoCancellation: false, noiseSuppression: false }
+    });
   } catch (e) { return; }
   dmIsSharing = true;
   document.getElementById('dmCallShareBtn').classList.add('active');
@@ -3145,11 +3261,193 @@ document.getElementById('dmCallMuteBtn').addEventListener('click', () => {
   if (!dmCallStream) return;
   dmCallMuted = !dmCallMuted;
   dmCallStream.getAudioTracks().forEach(t => t.enabled = !dmCallMuted);
-  document.getElementById('dmCallMuteBtn').textContent = dmCallMuted ? '🔇' : '🎤';
+  document.getElementById('dmCallMuteBtn').innerHTML = dmCallMuted ? '<img src="relinkicons/muted.svg" class="ri-icon">' : '<img src="relinkicons/mutebutton.svg" class="ri-icon">';
   document.getElementById('dmCallMuteBtn').classList.toggle('active', dmCallMuted);
 });
 
 document.getElementById('dmCallEndBtn').addEventListener('click', () => endDMCall(true));
+
+// ══════════════════════════════════════════════════════════════════
+//  FRIENDS & FRIEND REQUESTS
+// ══════════════════════════════════════════════════════════════════
+
+let unsubFriends = null;
+
+document.getElementById('friendsBtn').addEventListener('click', openFriendsModal);
+document.getElementById('friendsModalClose').addEventListener('click', closeFriendsModal);
+document.getElementById('friendsModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('friendsModal')) closeFriendsModal();
+});
+document.getElementById('friendAddBtn').addEventListener('click', sendFriendRequest);
+document.getElementById('friendAddInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendFriendRequest();
+});
+
+async function openFriendsModal() {
+  document.getElementById('friendsModal').classList.add('open');
+  document.getElementById('friendAddMsg').textContent = '';
+  document.getElementById('friendAddInput').value = '';
+  await loadFriends();
+}
+
+function closeFriendsModal() {
+  document.getElementById('friendsModal').classList.remove('open');
+}
+
+async function sendFriendRequest() {
+  const username = document.getElementById('friendAddInput').value.trim();
+  const msg = document.getElementById('friendAddMsg');
+  msg.style.color = 'var(--text-muted)';
+  msg.textContent = '';
+  if (!username) return;
+  if (username === myUsername) return (msg.style.color = '#e07070', msg.textContent = "You can't add yourself.");
+
+  // Find user
+  const snap = await getDocs(query(collection(db, 'users'), where('username', '==', username)));
+  if (snap.empty) return (msg.style.color = '#e07070', msg.textContent = 'User not found.');
+  const targetUid = snap.docs[0].data().uid;
+
+  // Check if already friends
+  const existingFriend = await getDoc(doc(db, 'friends', currentUser.uid + '_' + targetUid));
+  const existingFriend2 = await getDoc(doc(db, 'friends', targetUid + '_' + currentUser.uid));
+  if (existingFriend.exists() || existingFriend2.exists())
+    return (msg.style.color = '#e07070', msg.textContent = 'Already friends!');
+
+  // Check if request already sent
+  const existingReq = await getDoc(doc(db, 'friendRequests', currentUser.uid + '_' + targetUid));
+  if (existingReq.exists())
+    return (msg.style.color = '#e07070', msg.textContent = 'Request already sent.');
+
+  await setDoc(doc(db, 'friendRequests', currentUser.uid + '_' + targetUid), {
+    fromUid: currentUser.uid,
+    fromUsername: myUsername,
+    fromDisplayName: myDisplayName || myUsername,
+    fromAvatar: myAvatar || null,
+    toUid: targetUid,
+    toUsername: username,
+    ts: serverTimestamp()
+  });
+
+  msg.style.color = '#3ba55c';
+  msg.textContent = `Friend request sent to ${username}!`;
+  document.getElementById('friendAddInput').value = '';
+}
+
+async function loadFriends() {
+  if (!currentUser) return;
+
+  // Load incoming requests
+  const reqSnap = await getDocs(query(collection(db, 'friendRequests'), where('toUid', '==', currentUser.uid)));
+  const reqsSection = document.getElementById('friendReqsSection');
+  const reqsList = document.getElementById('friendReqsList');
+  reqsList.innerHTML = '';
+  if (reqSnap.empty) {
+    reqsSection.style.display = 'none';
+  } else {
+    reqsSection.style.display = 'block';
+    reqSnap.docs.forEach(d => {
+      const r = d.data();
+      const item = makeFriendItem(r.fromAvatar, r.fromDisplayName || r.fromUsername, [
+        { label: '✓', cls: 'friend-btn-accept', fn: () => acceptFriendRequest(d.id, r) },
+        { label: '✕', cls: 'friend-btn-decline', fn: () => declineFriendRequest(d.id) }
+      ]);
+      reqsList.appendChild(item);
+    });
+    // Update badge
+    document.getElementById('friendReqBadge').textContent = reqSnap.size;
+    document.getElementById('friendReqBadge').classList.remove('hidden');
+  }
+
+  // Load accepted friends
+  const friendsList = document.getElementById('friendsList');
+  friendsList.innerHTML = '';
+  const f1 = await getDocs(query(collection(db, 'friends'), where('uids', 'array-contains', currentUser.uid)));
+  if (f1.empty) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'font-size:13px;color:var(--text-muted);padding:8px';
+    empty.textContent = 'No friends yet. Add someone above!';
+    friendsList.appendChild(empty);
+  } else {
+    f1.docs.forEach(d => {
+      const data = d.data();
+      const otherUid = data.uids.find(u => u !== currentUser.uid);
+      const otherName = data.usernames[otherUid];
+      const otherAvatar = data.avatars?.[otherUid] || null;
+      const item = makeFriendItem(otherAvatar, otherName, [
+        { label: '💬 DM', cls: 'friend-btn-add', fn: () => { closeFriendsModal(); startDMWithUid(otherUid, otherName); } },
+        { label: '✕', cls: 'friend-btn-decline', fn: () => removeFriend(d.id) }
+      ]);
+      friendsList.appendChild(item);
+    });
+  }
+}
+
+function makeFriendItem(avatar, name, actions) {
+  const item = document.createElement('div');
+  item.className = 'friend-item';
+  const av = document.createElement('div');
+  av.className = 'friend-item-avatar';
+  if (avatar) av.innerHTML = `<img src="${avatar}" alt="">`;
+  else av.textContent = (name || '?')[0].toUpperCase();
+  const nm = document.createElement('div');
+  nm.className = 'friend-item-name';
+  nm.textContent = name;
+  const actDiv = document.createElement('div');
+  actDiv.className = 'friend-item-actions';
+  actions.forEach(({ label, cls, fn }) => {
+    const btn = document.createElement('button');
+    btn.className = 'friend-btn ' + cls;
+    btn.textContent = label;
+    btn.onclick = fn;
+    actDiv.appendChild(btn);
+  });
+  item.appendChild(av); item.appendChild(nm); item.appendChild(actDiv);
+  return item;
+}
+
+async function acceptFriendRequest(reqId, r) {
+  await setDoc(doc(db, 'friends', reqId), {
+    uids: [r.fromUid, r.toUid],
+    usernames: { [r.fromUid]: r.fromUsername, [r.toUid]: myUsername },
+    avatars: { [r.fromUid]: r.fromAvatar || null, [r.toUid]: myAvatar || null },
+    ts: serverTimestamp()
+  });
+  await deleteDoc(doc(db, 'friendRequests', reqId));
+  document.getElementById('friendReqBadge').classList.add('hidden');
+  await loadFriends();
+}
+
+async function declineFriendRequest(reqId) {
+  await deleteDoc(doc(db, 'friendRequests', reqId));
+  await loadFriends();
+}
+
+async function removeFriend(friendId) {
+  if (!confirm('Remove this friend?')) return;
+  await deleteDoc(doc(db, 'friends', friendId));
+  await loadFriends();
+}
+
+async function startDMWithUid(uid, username) {
+  await setDoc(doc(db, 'userDMs', currentUser.uid), { [uid]: username }, { merge: true });
+  await setDoc(doc(db, 'userDMs', uid), { [currentUser.uid]: myUsername }, { merge: true });
+  await loadDMList();
+  openDM(uid, username);
+}
+
+// Listen for incoming friend requests and badge the friends button
+function listenFriendRequests() {
+  if (!currentUser) return;
+  onSnapshot(query(collection(db, 'friendRequests'), where('toUid', '==', currentUser.uid)), snap => {
+    const badge = document.getElementById('friendReqBadge');
+    if (snap.size > 0) {
+      badge.textContent = snap.size > 9 ? '9+' : snap.size;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  });
+}
 </script>
 </body>
 </html>
