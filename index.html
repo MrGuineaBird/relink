@@ -1599,9 +1599,12 @@ async function joinVoiceChannel(name) {
 async function callPeer(remoteUid, vcName) {
   const pc = createPC(remoteUid);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  // If we're already sharing, add the screen track to this new connection too
+  if (isSharing && screenStream) {
+    screenStream.getVideoTracks().forEach(t => pc.addTrack(t, screenStream));
+  }
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  // Send offer to remote peer's inbox
   await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', remoteUid, 'inbox'), {
     type: 'offer', from: currentUser.uid, sdp: offer.sdp
   });
@@ -1610,6 +1613,10 @@ async function callPeer(remoteUid, vcName) {
 async function handleOffer(sig, vcName) {
   const pc = createPC(sig.from);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  // If we're already sharing, add the screen track to this new connection too
+  if (isSharing && screenStream) {
+    screenStream.getVideoTracks().forEach(t => pc.addTrack(t, screenStream));
+  }
   await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sig.sdp }));
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
@@ -1806,7 +1813,89 @@ async function stopScreenShare() {
 }
 
 document.getElementById('vcLeaveBtn').addEventListener('click', leaveVoiceChannel);
-window.addEventListener('beforeunload', () => { leaveVoiceChannel(); clearPresence(); });
+
+// ── Reliable tab-close cleanup ─────────────────────────────────────
+// Uses keepalive fetch (browser completes it even after tab closes)
+// + heartbeat so stale entries auto-expire for others
+
+const FIREBASE_PROJECT = 'relink-fbfa5';
+let heartbeatInterval = null;
+
+async function getAuthToken() {
+  try { return await currentUser?.getIdToken(); } catch (_) { return null; }
+}
+
+async function deleteParticipantBeacon(serverId, vcName, uid) {
+  const token = await getAuthToken();
+  if (!token) return;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/servers/${serverId}/vc/${vcName}/participants/${uid}`;
+  // keepalive: true survives tab close
+  fetch(url, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+}
+
+function startVcHeartbeat(serverId, vcName) {
+  stopVcHeartbeat();
+  heartbeatInterval = setInterval(async () => {
+    if (!currentUser || !currentVcChannel) return;
+    try {
+      await updateDoc(doc(db, 'servers', serverId, 'vc', vcName, 'participants', currentUser.uid), {
+        lastSeen: serverTimestamp()
+      });
+    } catch (_) {}
+  }, 10000); // every 10 s
+}
+
+function stopVcHeartbeat() {
+  if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+}
+
+// Purge participants whose heartbeat is >25 s old (they closed their tab)
+async function purgeStaleParticipants(serverId, vcName) {
+  const snap = await getDocs(collection(db, 'servers', serverId, 'vc', vcName, 'participants'));
+  const cutoff = Date.now() - 25000;
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.lastSeen && data.lastSeen.toMillis() < cutoff) {
+      try { await deleteDoc(d.ref); } catch (_) {}
+    }
+  }
+}
+
+// Patch joinVoiceChannel to start heartbeat + purge stale on join
+const _origJoin = joinVoiceChannel;
+async function joinVoiceChannel(name) {
+  await _origJoin(name);
+  if (currentVcChannel) {
+    await purgeStaleParticipants(currentServer, name);
+    startVcHeartbeat(currentServer, name);
+  }
+}
+
+// Patch leaveVoiceChannel to stop heartbeat
+const _origLeave = leaveVoiceChannel;
+async function leaveVoiceChannel() {
+  stopVcHeartbeat();
+  await _origLeave();
+}
+
+// Tab close — use keepalive fetch to reliably delete presence
+async function handleTabClose() {
+  stopVcHeartbeat();
+  if (currentVcChannel && currentServer && currentUser) {
+    await deleteParticipantBeacon(currentServer, currentVcChannel, currentUser.uid);
+  }
+  // Also clear general presence
+  if (currentUser && currentServer) {
+    const token = await getAuthToken();
+    if (token) {
+      const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/servers/${currentServer}/presence/${currentUser.uid}`;
+      fetch(url, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    }
+  }
+}
+
+window.addEventListener('pagehide', handleTabClose);
+window.addEventListener('beforeunload', handleTabClose);
 </script>
 </body>
 </html>
