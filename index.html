@@ -1827,8 +1827,10 @@ async function sendMessage() {
   document.getElementById('imgPreviewBar').classList.remove('visible');
   document.getElementById('imgPreviewImg').src = '';
 
-  // Clear typing indicator
-  try { await deleteDoc(doc(db, 'servers', currentServer, 'channels', currentChannel, 'typing', currentUser.uid)); } catch (_) {}
+  // Clear typing indicator (only in server channels, not DMs)
+  if (currentServer && currentChannel) {
+    try { await deleteDoc(doc(db, 'servers', currentServer, 'channels', currentChannel, 'typing', currentUser.uid)); } catch (_) {}
+  }
   clearTimeout(typingTimeout);
 
   if (inDM && currentDMUid) { cancelReply(); await sendDM(text, image); return; }
@@ -2616,12 +2618,15 @@ let dmCallMuted       = false;
 let dmCallActive      = false;
 let dmCallPartnerId   = null;
 let unsubDmCall       = null;
+let unsubDmCallIncoming = null; // separate listener for incoming calls
 let dmCallVADSelf     = null;
 let dmCallVADThem     = null;
+let dmCallRtcReady    = false; // guard against double-init
+let dmCallIceCallerCount = 0;  // track how many caller ICE we've processed
+let dmCallIceCalleeCount = 0;  // track how many callee ICE we've processed
 
 function dmCallId(uid1, uid2) { return [uid1, uid2].sort().join('_'); }
 
-// Show/hide call button when entering/leaving DM view
 document.getElementById('dmCallBtn').addEventListener('click', startDMCall);
 
 function setDMCallAvatarEl(elId, userData) {
@@ -2640,74 +2645,85 @@ async function startDMCall() {
   } catch (e) { alert('Microphone access denied.'); return; }
 
   dmCallActive    = true;
+  dmCallRtcReady  = false;
   dmCallPartnerId = currentDMUid;
   const cid = dmCallId(currentUser.uid, currentDMUid);
 
-  // Write call doc — signals the other person
   await setDoc(doc(db, 'dmCalls', cid), {
-    callerId:      currentUser.uid,
-    callerName:    myDisplayName || myUsername,
-    callerAvatar:  myAvatar || null,
-    calleeId:      currentDMUid,
-    status:        'ringing',
-    ts:            serverTimestamp()
+    callerId:     currentUser.uid,
+    callerName:   myDisplayName || myUsername,
+    callerAvatar: myAvatar || null,
+    calleeId:     currentDMUid,
+    status:       'ringing',
+    callerSdp:    null,
+    calleeSdp:    null,
+    iceCaller:    [],
+    iceCallee:    [],
+    ts:           serverTimestamp()
   });
 
   showCallOverlay('Calling…', currentDMUid);
   startDMCallVAD('self', dmCallStream);
-
-  // Wait for callee to accept
-  listenDMCallDoc(cid);
+  listenDMCallDoc(cid, true); // true = I am caller
 }
 
 function showCallOverlay(status, partnerId) {
-  const overlay = document.getElementById('dmCallOverlay');
-  overlay.classList.add('visible');
+  document.getElementById('dmCallOverlay').classList.add('visible');
   document.getElementById('dmCallStatus').textContent = status;
-
-  // My avatar
   setDMCallAvatarEl('dmCallMyAvatar', { displayName: myDisplayName || myUsername, avatar: myAvatar });
   document.getElementById('dmCallMyName').textContent = myDisplayName || myUsername;
-
-  // Their avatar — try vcParticipantData or fetch
-  const partnerData = { uid: partnerId, displayName: currentDMName, username: currentDMName };
-  setDMCallAvatarEl('dmCallTheirAvatar', partnerData);
+  setDMCallAvatarEl('dmCallTheirAvatar', { displayName: currentDMName, username: currentDMName });
   document.getElementById('dmCallTheirName').textContent = currentDMName || partnerId;
 }
 
-function listenDMCallDoc(cid) {
+function listenDMCallDoc(cid, isCaller) {
   if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
   unsubDmCall = onSnapshot(doc(db, 'dmCalls', cid), async snap => {
     if (!snap.exists()) { endDMCall(false); return; }
     const data = snap.data();
-    if (data.status === 'accepted' && data.callerId === currentUser.uid) {
-      // Callee accepted — start WebRTC as caller
-      document.getElementById('dmCallStatus').textContent = 'Connected';
-      await initDMCallRTC(cid, true);
-    }
-    if (data.status === 'ended') { endDMCall(false); }
-    // Handle signaling
-    if (data.callerSdp && data.calleeId === currentUser.uid && !dmCallPc?.remoteDescription) {
-      await handleDMCallOffer(data, cid);
-    }
-    if (data.calleeSdp && data.callerId === currentUser.uid && dmCallPc && !dmCallPc.remoteDescription) {
-      await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.calleeSdp });
-      flushDMCallICE();
-    }
-    if (data.iceCallee && data.callerId === currentUser.uid) {
-      for (const c of data.iceCallee) {
-        try { if (dmCallPc?.remoteDescription) await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+
+    if (data.status === 'ended') { endDMCall(false); return; }
+
+    if (isCaller) {
+      // Caller: wait for accepted, then create offer
+      if (data.status === 'accepted' && !dmCallRtcReady) {
+        dmCallRtcReady = true;
+        document.getElementById('dmCallStatus').textContent = 'Connecting…';
+        await initDMCallRTC(cid, true);
       }
-    }
-    if (data.iceCaller && data.calleeId === currentUser.uid) {
-      for (const c of data.iceCaller) {
-        try { if (dmCallPc?.remoteDescription) await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+      // Caller: got callee's answer
+      if (data.calleeSdp && dmCallPc && !dmCallPc.remoteDescription) {
+        await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.calleeSdp });
+      }
+      // Caller: process new callee ICE candidates
+      if (data.iceCallee && dmCallPc?.remoteDescription) {
+        const newCandidates = data.iceCallee.slice(dmCallIceCalleeCount);
+        for (const c of newCandidates) {
+          try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        }
+        dmCallIceCalleeCount = data.iceCallee.length;
+      }
+    } else {
+      // Callee: got caller's offer
+      if (data.callerSdp && !dmCallRtcReady) {
+        dmCallRtcReady = true;
+        await initDMCallRTC(cid, false);
+        await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
+        const answer = await dmCallPc.createAnswer();
+        await dmCallPc.setLocalDescription(answer);
+        await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
+      }
+      // Callee: process new caller ICE candidates
+      if (data.iceCaller && dmCallPc?.remoteDescription) {
+        const newCandidates = data.iceCaller.slice(dmCallIceCallerCount);
+        for (const c of newCandidates) {
+          try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        }
+        dmCallIceCallerCount = data.iceCaller.length;
       }
     }
   });
 }
-
-let dmCallIceQueue = [];
 
 async function initDMCallRTC(cid, isCaller) {
   dmCallPc = new RTCPeerConnection(ICE_SERVERS);
@@ -2728,6 +2744,12 @@ async function initDMCallRTC(cid, isCaller) {
     document.getElementById('dmCallStatus').textContent = 'Connected';
   };
 
+  dmCallPc.onconnectionstatechange = () => {
+    if (dmCallPc?.connectionState === 'connected') {
+      document.getElementById('dmCallStatus').textContent = 'Connected';
+    }
+  };
+
   if (isCaller) {
     const offer = await dmCallPc.createOffer();
     await dmCallPc.setLocalDescription(offer);
@@ -2735,26 +2757,11 @@ async function initDMCallRTC(cid, isCaller) {
   }
 }
 
-async function handleDMCallOffer(data, cid) {
-  await initDMCallRTC(cid, false);
-  await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
-  const answer = await dmCallPc.createAnswer();
-  await dmCallPc.setLocalDescription(answer);
-  await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
-}
-
-function flushDMCallICE() {
-  dmCallIceQueue.forEach(async c => {
-    try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
-  });
-  dmCallIceQueue = [];
-}
-
-// Listen for incoming calls from the current DM partner
+// Listen for INCOMING calls — kept separate from the active call listener
 function listenDMCall(partnerUid) {
-  if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
+  if (unsubDmCallIncoming) { unsubDmCallIncoming(); unsubDmCallIncoming = null; }
   const cid = dmCallId(currentUser.uid, partnerUid);
-  unsubDmCall = onSnapshot(doc(db, 'dmCalls', cid), snap => {
+  unsubDmCallIncoming = onSnapshot(doc(db, 'dmCalls', cid), snap => {
     if (!snap.exists()) return;
     const data = snap.data();
     if (data.status === 'ringing' && data.calleeId === currentUser.uid && !dmCallActive) {
@@ -2774,12 +2781,15 @@ function showIncomingCall(data, cid) {
     try {
       dmCallStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) { alert('Microphone access denied.'); return; }
-    dmCallActive    = true;
-    dmCallPartnerId = data.callerId;
+    dmCallActive         = true;
+    dmCallRtcReady       = false;
+    dmCallIceCallerCount = 0;
+    dmCallIceCalleeCount = 0;
+    dmCallPartnerId      = data.callerId;
     await updateDoc(doc(db, 'dmCalls', cid), { status: 'accepted' });
     showCallOverlay('Connecting…', data.callerId);
     startDMCallVAD('self', dmCallStream);
-    listenDMCallDoc(cid);
+    listenDMCallDoc(cid, false); // false = I am callee
   };
 
   document.getElementById('dmCallDeclineBtn').onclick = async () => {
@@ -2788,8 +2798,11 @@ function showIncomingCall(data, cid) {
   };
 }
 
-async function endDMCall(deleteDoc_ = true) {
-  dmCallActive = false;
+async function endDMCall(writeEnd = true) {
+  dmCallActive   = false;
+  dmCallRtcReady = false;
+  dmCallIceCallerCount = 0;
+  dmCallIceCalleeCount = 0;
   if (dmCallPc)    { dmCallPc.close(); dmCallPc = null; }
   if (dmCallStream){ dmCallStream.getTracks().forEach(t => t.stop()); dmCallStream = null; }
   if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
@@ -2803,14 +2816,13 @@ async function endDMCall(deleteDoc_ = true) {
   document.getElementById('dmCallTheirAvatar').classList.remove('speaking');
   dmCallMuted = false;
   document.getElementById('dmCallMuteBtn').textContent = '🎤';
+  document.getElementById('dmCallMuteBtn').classList.remove('active');
 
-  if (deleteDoc_ && dmCallPartnerId) {
+  if (writeEnd && dmCallPartnerId) {
     const cid = dmCallId(currentUser.uid, dmCallPartnerId);
     try { await updateDoc(doc(db, 'dmCalls', cid), { status: 'ended' }); } catch (_) {}
   }
   dmCallPartnerId = null;
-
-  // Re-listen for incoming calls
   if (currentDMUid) listenDMCall(currentDMUid);
 }
 
