@@ -101,9 +101,14 @@
     .reply-bar strong { color:var(--text) }
     .reply-cancel { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px; line-height:1; padding:0 2px }
     .reply-cancel:hover { color:var(--text) }
-    .msg-reply-quote { background:rgba(255,255,255,0.04); border-left:3px solid var(--text-muted); padding:3px 8px; border-radius:0 4px 4px 0; margin-bottom:4px; font-size:12px; color:var(--text-muted); cursor:pointer; max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis }
-    .msg-reply-quote:hover { background:rgba(255,255,255,0.08) }
-    .msg-reply-quote strong { color:#7fa8e8 }
+    .msg-reply-quote { display:flex; align-items:center; gap:6px; margin-bottom:2px; padding-left:12px; position:relative; cursor:pointer; max-width:100%; min-height:22px }
+    .msg-reply-quote:hover .msg-reply-text { color:var(--text) }
+    .msg-reply-curve { position:absolute; left:0; top:50%; width:28px; height:14px; border-left:2px solid var(--text-muted); border-top:2px solid var(--text-muted); border-radius:6px 0 0 0; transform:translateY(-100%); opacity:0.5 }
+    .msg-reply-mini-avatar { width:16px; height:16px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; overflow:hidden; flex-shrink:0 }
+    .msg-reply-mini-avatar img { width:100%; height:100%; object-fit:cover }
+    .msg-reply-name { font-size:12px; font-weight:600; color:#7fa8e8; white-space:nowrap; flex-shrink:0 }
+    .msg-reply-text { font-size:12px; color:var(--text-muted); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; max-width:400px }
+    .msg-reply-quote:hover { opacity:0.85 }
 
     /* Message hover actions */
     .message { position:relative }
@@ -1228,14 +1233,42 @@ function appendMessage(m, msgId) {
   div.id = 'msg-' + msgId;
   if (isMentioned(m.text)) div.classList.add('mentioned');
 
-  // Reply quote
+  // Reply quote — Discord style
   if (m.replyTo) {
     const quote = document.createElement('div');
     quote.className = 'msg-reply-quote';
-    quote.innerHTML = `<strong>${m.replyTo.displayName || m.replyTo.username}:</strong> ${m.replyTo.text || '📷 image'}`;
+
+    // Curved connector line
+    const curve = document.createElement('div');
+    curve.className = 'msg-reply-curve';
+    quote.appendChild(curve);
+
+    // Mini avatar of the person being replied to
+    const miniAv = document.createElement('div');
+    miniAv.className = 'msg-reply-mini-avatar';
+    if (m.replyTo.avatar) { miniAv.innerHTML = `<img src="${m.replyTo.avatar}" alt="">`; }
+    else { miniAv.textContent = (m.replyTo.displayName || m.replyTo.username || '?')[0].toUpperCase(); }
+    quote.appendChild(miniAv);
+
+    // Name
+    const rName = document.createElement('span');
+    rName.className = 'msg-reply-name';
+    rName.textContent = m.replyTo.displayName || m.replyTo.username;
+    quote.appendChild(rName);
+
+    // Quoted text
+    const rText = document.createElement('span');
+    rText.className = 'msg-reply-text';
+    rText.textContent = m.replyTo.text || '📷 image';
+    quote.appendChild(rText);
+
     quote.onclick = () => {
       const orig = document.getElementById('msg-' + m.replyTo.id);
-      if (orig) { orig.scrollIntoView({ behavior: 'smooth', block: 'center' }); orig.style.outline = '2px solid var(--accent)'; setTimeout(() => orig.style.outline = '', 1500); }
+      if (orig) {
+        orig.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        orig.style.outline = '2px solid var(--accent)';
+        setTimeout(() => orig.style.outline = '', 1500);
+      }
     };
     div.appendChild(quote);
   }
@@ -1339,7 +1372,7 @@ function removeMessageFromDOM(msgId) {
 // ══════════════════════════════════════════════════════════════════
 
 function startReply(msgId, m) {
-  replyingTo = { id: msgId, text: m.text, displayName: m.displayName || m.username, username: m.username };
+  replyingTo = { id: msgId, text: m.text, displayName: m.displayName || m.username, username: m.username, avatar: m.avatar || null };
   document.getElementById('replyBarText').innerHTML = `<strong>${replyingTo.displayName}:</strong> ${replyingTo.text || '📷 image'}`;
   document.getElementById('replyBar').classList.add('visible');
   document.getElementById('inputMsg').focus();
@@ -1909,17 +1942,19 @@ let localStream      = null;
 let screenStream     = null;
 let isSharing        = false;
 let isMuted          = false;
-const peerConnections = {};
+const peerConnections = {};      // uid → RTCPeerConnection
+const iceQueues       = {};      // uid → pending ICE candidates before remote desc set
 let vcParticipantsUnsub = null;
+let unsubSignals        = null;  // signal inbox listener — must be cleared on leave
 const vadIntervals = {};
-const vcParticipantData = {}; // uid → { displayName, username, avatar, ... }
+const vcParticipantData = {};
 
 const ICE_SERVERS = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' }
 ]};
 
-// Voice Activity Detection — highlights a participant row green while speaking
+// ── VAD ────────────────────────────────────────────────────────────
 function startVAD(uid, stream) {
   try {
     const ctx = new AudioContext();
@@ -1929,18 +1964,16 @@ function startVAD(uid, stream) {
     src.connect(analyser);
     const data = new Uint8Array(analyser.frequencyBinCount);
     let speaking = false;
-
     const id = setInterval(() => {
       analyser.getByteFrequencyData(data);
       const avg = data.reduce((a, b) => a + b, 0) / data.length;
-      const isTalking = avg > 8; // threshold — tweak if needed
+      const isTalking = avg > 8;
       if (isTalking !== speaking) {
         speaking = isTalking;
         const row = document.getElementById('vc-row-' + uid);
         if (row) row.classList.toggle('speaking', speaking);
       }
     }, 80);
-
     vadIntervals[uid] = { id, ctx };
   } catch (_) {}
 }
@@ -1955,6 +1988,7 @@ function stopVAD(uid) {
   if (row) row.classList.remove('speaking');
 }
 
+// ── Participant list ───────────────────────────────────────────────
 function addVcChannelItem(name) {
   const el = document.createElement('div');
   el.className = 'vc-item' + (name === currentVcChannel ? ' active' : '');
@@ -1968,14 +2002,11 @@ function addVcChannelItem(name) {
   partEl.id = 'vc-parts-' + name;
   channelList.appendChild(partEl);
 
-  // Listen for participants — store in vcParticipantData map for other functions to use
   onSnapshot(collection(db, 'servers', currentServer, 'vc', name, 'participants'), snap => {
     partEl.innerHTML = '';
     snap.docs.forEach(d => {
       const p = d.data();
-      // Store participant data so addShareTile / VAD can look it up
       vcParticipantData[p.uid] = p;
-
       const row = document.createElement('div');
       row.className = 'vc-participant';
       row.id = 'vc-row-' + p.uid;
@@ -1985,18 +2016,13 @@ function addVcChannelItem(name) {
       else av.textContent = (p.displayName || p.username || '?')[0].toUpperCase();
       const nm = document.createElement('span');
       nm.textContent = p.displayName || p.username;
-      row.appendChild(av);
-      row.appendChild(nm);
+      row.appendChild(av); row.appendChild(nm);
       partEl.appendChild(row);
-
-      // If this participant already has a share tile, update its label now the data is available
       if (activeTiles[p.uid]) {
         const label = activeTiles[p.uid].querySelector('.screenshare-tile-label');
         if (label) label.textContent = '🖥️ ' + (p.displayName || p.username);
       }
     });
-
-    // Remove stale entries from map
     const activeUids = new Set(snap.docs.map(d => d.id));
     Object.keys(vcParticipantData).forEach(uid => {
       if (!activeUids.has(uid)) delete vcParticipantData[uid];
@@ -2004,9 +2030,10 @@ function addVcChannelItem(name) {
   });
 }
 
+// ── Join ───────────────────────────────────────────────────────────
 async function joinVoiceChannel(name) {
-  if (currentVcChannel === name) return; // already in it
-  if (currentVcChannel) await leaveVoiceChannel(); // leave current first
+  if (currentVcChannel === name) return;
+  if (currentVcChannel) await leaveVoiceChannel();
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -2018,64 +2045,60 @@ async function joinVoiceChannel(name) {
   currentVcChannel = name;
   startVAD(currentUser.uid, localStream);
 
-  // Store own data immediately so tiles/labels work before Firestore snapshot fires
   vcParticipantData[currentUser.uid] = {
-    uid: currentUser.uid,
-    username: myUsername,
-    displayName: myDisplayName || myUsername,
-    avatar: myAvatar || null
+    uid: currentUser.uid, username: myUsername,
+    displayName: myDisplayName || myUsername, avatar: myAvatar || null
   };
 
-  // Mark ourselves as present
   await setDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid), {
-    uid: currentUser.uid,
-    username: myUsername,
-    displayName: myDisplayName || myUsername,
-    avatar: myAvatar || null,
-    joinedAt: serverTimestamp(),
-    lastSeen: serverTimestamp()
+    uid: currentUser.uid, username: myUsername,
+    displayName: myDisplayName || myUsername, avatar: myAvatar || null,
+    joinedAt: serverTimestamp(), lastSeen: serverTimestamp()
   });
 
+  // Wait a tick so serverTimestamp resolves before purging
+  await new Promise(r => setTimeout(r, 500));
   await purgeStaleParticipants(currentServer, name);
   startVcHeartbeat(currentServer, name);
 
-  // Highlight VC item
   document.querySelectorAll('.vc-item').forEach(el => {
     el.classList.toggle('active', el.dataset.vcName === name);
   });
-
-  // Show active bar
-  const bar = document.getElementById('vcActiveBar');
-  bar.classList.add('visible');
+  document.getElementById('vcActiveBar').classList.add('visible');
   document.getElementById('vcActiveBarName').textContent = '🔊 ' + name.replace(/^vc-/, '');
   document.getElementById('vcActiveBarServer').textContent = serverHeader.textContent;
 
-  // Connect to existing participants
+  // Fetch existing participants and call those with LOWER uid (prevents double-offer)
   const snap = await getDocs(collection(db, 'servers', currentServer, 'vc', name, 'participants'));
   for (const d of snap.docs) {
-    if (d.id !== currentUser.uid) {
+    if (d.id !== currentUser.uid && d.id < currentUser.uid) {
       await callPeer(d.id, name);
     }
   }
 
-  // Listen for incoming offers/ICE from others
-  onSnapshot(collection(db, 'servers', currentServer, 'vc', name, 'signals', currentUser.uid, 'inbox'), async snap => {
-    for (const change of snap.docChanges()) {
-      if (change.type !== 'added') continue;
-      const sig = change.doc.data();
-      if (sig.type === 'offer') await handleOffer(sig, name);
-      if (sig.type === 'answer') await handleAnswer(sig);
-      if (sig.type === 'ice') await handleIce(sig);
-      await deleteDoc(change.doc.ref);
+  // Listen for incoming signals — store unsub so we can clean up on leave
+  if (unsubSignals) { unsubSignals(); unsubSignals = null; }
+  unsubSignals = onSnapshot(
+    collection(db, 'servers', currentServer, 'vc', name, 'signals', currentUser.uid, 'inbox'),
+    async snap => {
+      for (const change of snap.docChanges()) {
+        if (change.type !== 'added') continue;
+        const sig = change.doc.data();
+        if (sig.type === 'offer')  await handleOffer(sig, name);
+        if (sig.type === 'answer') await handleAnswer(sig);
+        if (sig.type === 'ice')    await handleIce(sig);
+        await deleteDoc(change.doc.ref);
+      }
     }
-  });
+  );
 }
 
+// ── Peer connection ────────────────────────────────────────────────
 async function callPeer(remoteUid, vcName) {
   const pc = createPC(remoteUid);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
   if (isSharing && screenStream) {
-    screenStream.getVideoTracks().forEach(t => pc.addTrack(t, screenStream));
+    screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
   }
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
@@ -2087,33 +2110,44 @@ async function callPeer(remoteUid, vcName) {
 async function handleOffer(sig, vcName) {
   const pc = createPC(sig.from);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-  // Set remote description FIRST, then add screen share track and renegotiate
+  if (isSharing && screenStream) {
+    screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
+  }
   await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sig.sdp }));
+
+  // Flush any queued ICE candidates
+  for (const c of (iceQueues[sig.from] || [])) {
+    try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+  }
+  delete iceQueues[sig.from];
+
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', sig.from, 'inbox'), {
     type: 'answer', from: currentUser.uid, sdp: answer.sdp
   });
-  // If we're sharing, send a fresh offer after answering so they get our video track too
-  if (isSharing && screenStream) {
-    screenStream.getVideoTracks().forEach(t => pc.addTrack(t, screenStream));
-    const reoffer = await pc.createOffer();
-    await pc.setLocalDescription(reoffer);
-    await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', sig.from, 'inbox'), {
-      type: 'offer', from: currentUser.uid, sdp: reoffer.sdp
-    });
-  }
 }
 
 async function handleAnswer(sig) {
   const pc = peerConnections[sig.from];
-  if (pc) await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sig.sdp }));
+  if (!pc) return;
+  await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sig.sdp }));
+  // Flush queued ICE candidates
+  for (const c of (iceQueues[sig.from] || [])) {
+    try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+  }
+  delete iceQueues[sig.from];
 }
 
 async function handleIce(sig) {
   const pc = peerConnections[sig.from];
-  if (pc && sig.candidate) {
+  if (!pc || !sig.candidate) return;
+  if (pc.remoteDescription) {
     try { await pc.addIceCandidate(new RTCIceCandidate(sig.candidate)); } catch (_) {}
+  } else {
+    // Queue until remote description is set
+    if (!iceQueues[sig.from]) iceQueues[sig.from] = [];
+    iceQueues[sig.from].push(sig.candidate);
   }
 }
 
@@ -2131,29 +2165,30 @@ function createPC(remoteUid) {
   };
 
   pc.ontrack = e => {
-    const track = e.track;
-    if (track.kind === 'video') {
-      // Combine with any existing audio tracks from this peer's screen share
+    // Use track.kind directly — don't rely on stream contents which may be incomplete
+    if (e.track.kind === 'video') {
       addShareTile(remoteUid, e.streams[0], false);
-      track.onended = () => removeShareTile(remoteUid);
+      e.track.onended = () => removeShareTile(remoteUid);
     } else {
-      // Check if this audio belongs to a screen share stream or mic
-      const stream = e.streams[0];
-      const hasVideo = stream.getVideoTracks().length > 0;
-      if (hasVideo) {
-        // System audio from screen share — attach to the tile's video element
-        const tile = activeTiles[remoteUid];
-        if (tile) {
-          tile.querySelector('video').srcObject = stream;
-        }
-      } else {
-        // Mic audio
-        let audio = document.getElementById('vc-audio-' + remoteUid);
-        if (!audio) { audio = document.createElement('audio'); audio.id = 'vc-audio-' + remoteUid; document.body.appendChild(audio); }
-        audio.autoplay = true;
-        audio.srcObject = stream;
-        startVAD(remoteUid, stream);
+      // Audio — check if it's already handled as a share tile stream
+      const existingTile = activeTiles[remoteUid];
+      if (existingTile && existingTile.querySelector('video').srcObject === e.streams[0]) return;
+      let audio = document.getElementById('vc-audio-' + remoteUid);
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = 'vc-audio-' + remoteUid;
+        document.body.appendChild(audio);
       }
+      audio.autoplay = true;
+      audio.srcObject = e.streams[0];
+      startVAD(remoteUid, e.streams[0]);
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed') {
+      // Attempt ICE restart
+      pc.restartIce();
     }
   };
 
@@ -2254,10 +2289,14 @@ async function leaveVoiceChannel() {
   const name = currentVcChannel;
   currentVcChannel = null;
 
+  // Unsubscribe signal listener first
+  if (unsubSignals) { unsubSignals(); unsubSignals = null; }
+
   try { await deleteDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid)); } catch (_) {}
 
   Object.values(peerConnections).forEach(pc => pc.close());
   Object.keys(peerConnections).forEach(k => { stopVAD(k); delete peerConnections[k]; });
+  Object.keys(iceQueues).forEach(k => delete iceQueues[k]);
 
   stopVAD(currentUser.uid);
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
@@ -2267,7 +2306,6 @@ async function leaveVoiceChannel() {
 
   document.getElementById('vcActiveBar').classList.remove('visible');
   document.querySelectorAll('.vc-item').forEach(el => el.classList.remove('active'));
-
   isMuted = false;
   document.getElementById('vcMuteBtn').textContent = '🎤 Mute';
   document.getElementById('vcMuteBtn').classList.remove('active');
@@ -2337,9 +2375,23 @@ async function stopScreenShare() {
 
   removeShareTile(currentUser.uid);
 
+  // Remove ALL screen share senders (video + system audio)
   for (const pc of Object.values(peerConnections)) {
-    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-    if (sender) pc.removeTrack(sender);
+    pc.getSenders().forEach(sender => {
+      if (sender.track && (sender.track.kind === 'video' ||
+          (sender.track.kind === 'audio' && sender.track.label !== localStream?.getAudioTracks()[0]?.label))) {
+        try { pc.removeTrack(sender); } catch (_) {}
+      }
+    });
+    // Renegotiate after removing tracks
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals',
+        Object.keys(peerConnections).find(k => peerConnections[k] === pc), 'inbox'), {
+        type: 'offer', from: currentUser.uid, sdp: offer.sdp
+      });
+    } catch (_) {}
   }
 
   document.getElementById('vcShareBtn').textContent = '🖥️ Share';
