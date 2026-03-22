@@ -177,6 +177,23 @@
     .login-switch a:hover { text-decoration:underline }
     #loginError { color:#e07070; font-size:13px; margin-top:8px; min-height:18px; text-align:center }
 
+    /* Email verification screen */
+    #verifyScreen { display:none; align-items:center; justify-content:center; height:100vh; background:var(--bg); background-image: radial-gradient(ellipse at 20% 50%, rgba(45,74,124,0.25) 0%, transparent 60%) }
+    .verify-box { background:#1e2736; padding:40px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.5); width:100%; max-width:420px; box-sizing:border-box; text-align:center }
+    .verify-box h2 { margin:0 0 10px; font-size:22px }
+    .verify-icon { font-size:48px; margin-bottom:16px }
+    .verify-box p { color:var(--text-muted); font-size:14px; line-height:1.6; margin:0 0 24px }
+    .verify-box .verify-email { color:var(--text); font-weight:600 }
+    .verify-actions { display:flex; flex-direction:column; gap:10px }
+    .verify-btn { padding:11px; border-radius:6px; border:none; font-size:14px; font-weight:600; cursor:pointer; transition:background .2s }
+    .verify-btn-check { background:var(--accent); color:#fff }
+    .verify-btn-check:hover { background:var(--accent-hover) }
+    .verify-btn-resend { background:var(--panel); color:var(--text-muted) }
+    .verify-btn-resend:hover { background:#2e3d52; color:var(--text) }
+    .verify-btn-logout { background:none; color:var(--text-muted); font-size:13px; padding:6px }
+    .verify-btn-logout:hover { color:var(--text) }
+    #verifyMsg { font-size:13px; margin-top:10px; min-height:18px }
+
     /* Invite badge */
     .invite-badge { font-size:11px; background:var(--panel); padding:2px 6px; border-radius:4px; color:var(--text-muted); cursor:pointer; margin-left:4px }
     .invite-badge:hover { background:var(--accent) }
@@ -397,6 +414,21 @@
     </div>
   </div>
 
+</div>
+
+<!-- Email Verification Screen -->
+<div id="verifyScreen">
+  <div class="verify-box">
+    <div class="verify-icon">📧</div>
+    <h2>Check your email</h2>
+    <p>We sent a verification link to<br><span class="verify-email" id="verifyEmailAddr"></span><br><br>Click the link in the email to verify your account, then come back here.</p>
+    <div class="verify-actions">
+      <button class="verify-btn verify-btn-check" id="verifyCheckBtn">I've verified — Continue</button>
+      <button class="verify-btn verify-btn-resend" id="verifyResendBtn">Resend verification email</button>
+      <button class="verify-btn verify-btn-logout" id="verifyLogoutBtn">Sign in with a different account</button>
+    </div>
+    <div id="verifyMsg"></div>
+  </div>
 </div>
 
 <!-- Main App (hidden until login) -->
@@ -664,7 +696,7 @@
 import { initializeApp }                              from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword,
          signInWithEmailAndPassword, signOut,
-         onAuthStateChanged }                         from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+         onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { getFirestore, collection, doc, addDoc,
          getDoc, getDocs, setDoc, updateDoc, deleteDoc,
          query, where, orderBy, limitToLast,
@@ -737,6 +769,8 @@ async function signup() {
   try {
     const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(u), p);
     try { await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid }); } catch (_) {}
+    // Send verification email
+    try { await sendEmailVerification(cred.user); } catch (_) {}
   } catch (e) {
     err.textContent = e.code === 'auth/email-already-in-use' ? 'Username already taken.' : e.message;
   }
@@ -762,6 +796,15 @@ async function logout() {
 
 onAuthStateChanged(auth, async user => {
   if (user) {
+    // Check email verification
+    if (!user.emailVerified) {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('verifyScreen').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('verifyEmailAddr').textContent = user.email.replace('@relink.local', '');
+      return;
+    }
+
     currentUser = user;
     const snap = await getDoc(doc(db, 'users', user.uid));
     const data = snap.exists() ? snap.data() : {};
@@ -771,6 +814,7 @@ onAuthStateChanged(auth, async user => {
     myBio         = data.bio         || null;
     updateProfileBar();
     document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('verifyScreen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     await loadMyServers();
     await loadDMList();
@@ -780,6 +824,7 @@ onAuthStateChanged(auth, async user => {
     myDisplayName = null;
     myAvatar = null;
     document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('verifyScreen').style.display = 'none';
     document.getElementById('app').style.display = 'none';
     if (unsubMessages) { unsubMessages(); unsubMessages = null; }
     if (unsubPresence) { unsubPresence(); unsubPresence = null; }
@@ -1290,10 +1335,45 @@ function joinChannel(ch) {
   listenTyping(currentServer, ch);
 }
 
-function renderMentions(text) {
+const EMOJI_MAP = {
+  // Faces
+  smile:'😊', grin:'😁', laugh:'😂', rofl:'🤣', joy:'😂', wink:'😉',
+  blush:'😊', yum:'😋', sunglasses:'😎', heart_eyes:'😍', kissing:'😘',
+  thinking:'🤔', raised_eyebrow:'🤨', neutral:'😐', expressionless:'😑',
+  unamused:'😒', roll_eyes:'🙄', grimacing:'😬', lying:'🤥', shushing:'🤫',
+  zipper_mouth:'🤐', monocle:'🧐', nerd:'🤓', smirk:'😏', sad:'😢',
+  cry:'😭', sob:'😭', angry:'😠', rage:'😡', cursing:'🤬', skull:'💀',
+  dead:'💀', ghost:'👻', alien:'👽', robot:'🤖', clown:'🤡', poop:'💩',
+  fire:'🔥', eyes:'👀', ok:'👌', thumbsup:'👍', thumbsdown:'👎',
+  clap:'👏', raised_hands:'🙌', wave:'👋', pray:'🙏', muscle:'💪',
+  point_right:'👉', point_left:'👈', point_up:'☝️', point_down:'👇',
+  // Hearts & symbols
+  heart:'❤️', broken_heart:'💔', sparkling_heart:'💖', two_hearts:'💕',
+  100:'💯', sparkles:'✨', star:'⭐', star2:'🌟', dizzy:'💫', boom:'💥',
+  question:'❓', exclamation:'❗', warning:'⚠️', check:'✅', x:'❌',
+  no_entry:'⛔', zzz:'💤', speech:'💬', thought:'💭', money:'💰',
+  gem:'💎', crown:'👑', trophy:'🏆', medal:'🥇', target:'🎯',
+  // Nature
+  sun:'☀️', moon:'🌙', cloud:'☁️', rain:'🌧️', snow:'❄️', rainbow:'🌈',
+  lightning:'⚡', cat:'🐱', dog:'🐶', fox:'🦊', wolf:'🐺', bear:'🐻',
+  panda:'🐼', koala:'🐨', tiger:'🐯', lion:'🦁', frog:'🐸', snake:'🐍',
+  // Food & objects
+  pizza:'🍕', burger:'🍔', fries:'🍟', taco:'🌮', sushi:'🍣',
+  coffee:'☕', tea:'🍵', beer:'🍺', wine:'🍷', cake:'🎂',
+  // Activities
+  gaming:'🎮', music:'🎵', soccer:'⚽', basketball:'🏀', tennis:'🎾',
+  trophy2:'🏆', art:'🎨', book:'📚', computer:'💻', phone:'📱',
+  // Common shorthands
+  lol:'😂', gg:'👍', rip:'💀', ez:'😎', pog:'😮', pogchamp:'😮',
+  kek:'😂', omg:'😱', wtf:'😤', ngl:'😶', imo:'🤔', bruh:'😑',
+  based:'😎', sus:'😒', hype:'🔥', lit:'🔥', goat:'🐐', w:'🏆', l:'😔',
+};
+
+function renderText(text) {
   if (!text) return document.createDocumentFragment();
   const frag = document.createDocumentFragment();
-  const parts = text.split(/(@everyone|@\w+)/g);
+  // Split on @mentions AND :shortcodes:
+  const parts = text.split(/(@everyone|@\w+|:[a-zA-Z0-9_]+:)/g);
   parts.forEach(part => {
     if (part === '@everyone') {
       const span = document.createElement('span');
@@ -1305,12 +1385,27 @@ function renderMentions(text) {
       span.className = 'mention';
       span.textContent = part;
       frag.appendChild(span);
+    } else if (part.startsWith(':') && part.endsWith(':')) {
+      const key = part.slice(1, -1).toLowerCase();
+      const emoji = EMOJI_MAP[key];
+      if (emoji) {
+        const span = document.createElement('span');
+        span.textContent = emoji;
+        span.title = part; // show :name: on hover
+        span.style.fontSize = '1.2em';
+        frag.appendChild(span);
+      } else {
+        // Unknown shortcode — leave as-is
+        frag.appendChild(document.createTextNode(part));
+      }
     } else {
       frag.appendChild(document.createTextNode(part));
     }
   });
   return frag;
 }
+
+function renderMentions(text) { return renderText(text); }
 
 function isMentioned(text) {
   if (!text || !myUsername) return false;
@@ -1935,6 +2030,59 @@ window.addEventListener('beforeunload', clearPresence);
 // ── Login button wiring (must use addEventListener in module scope) ─
 document.getElementById('loginBtn').addEventListener('click', login);
 document.getElementById('signupBtn').addEventListener('click', signup);
+
+// ── Verify screen buttons ──────────────────────────────────────────
+document.getElementById('verifyCheckBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('verifyMsg');
+  msg.style.color = 'var(--text-muted)';
+  msg.textContent = 'Checking…';
+  try {
+    await auth.currentUser?.reload();
+    if (auth.currentUser?.emailVerified) {
+      msg.textContent = '';
+      // onAuthStateChanged will fire and show the app
+      // Force it by re-triggering
+      const u = auth.currentUser;
+      document.getElementById('verifyScreen').style.display = 'none';
+      currentUser = u;
+      const snap = await getDoc(doc(db, 'users', u.uid));
+      const data = snap.exists() ? snap.data() : {};
+      myUsername    = data.username    || u.email;
+      myDisplayName = data.displayName || myUsername;
+      myAvatar      = data.avatar      || null;
+      myBio         = data.bio         || null;
+      updateProfileBar();
+      document.getElementById('app').style.display = 'flex';
+      await loadMyServers();
+      await loadDMList();
+    } else {
+      msg.style.color = '#e07070';
+      msg.textContent = 'Email not verified yet. Check your inbox and click the link.';
+    }
+  } catch (e) {
+    msg.style.color = '#e07070';
+    msg.textContent = 'Error checking verification. Try again.';
+  }
+});
+
+document.getElementById('verifyResendBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('verifyMsg');
+  try {
+    await sendEmailVerification(auth.currentUser);
+    msg.style.color = '#3ba55c';
+    msg.textContent = '✅ Verification email resent!';
+    setTimeout(() => msg.textContent = '', 4000);
+  } catch (e) {
+    msg.style.color = '#e07070';
+    msg.textContent = e.code === 'auth/too-many-requests'
+      ? 'Too many requests — wait a minute and try again.'
+      : 'Failed to resend. Try again later.';
+  }
+});
+
+document.getElementById('verifyLogoutBtn').addEventListener('click', async () => {
+  await signOut(auth);
+});
 
 
 // ══════════════════════════════════════════════════════════════════
