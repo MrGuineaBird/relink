@@ -432,7 +432,7 @@
   </div>
 
   <div class="chat">
-    <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between"># none<button id="dmCallBtn" style="display:none;background:none;border:none;color:#3ba55c;cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px" title="Start voice call">📞</button></div>
+    <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between"><span id="chatHeaderText"># none</span><button id="dmCallBtn" style="display:none;background:none;border:none;color:#3ba55c;cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px" title="Start voice call">📞</button></div>
     <div class="screenshare-overlay" id="screenshareOverlay">
       <div class="screenshare-grid" id="screenshareGrid"></div>
     </div>
@@ -1156,7 +1156,7 @@ async function selectServer(serverId) {
   inviteBadge.style.display = 'inline';
   inviteBadge.title = 'Invite code: ' + currentInvite + ' (click to copy)';
 
-  chatHeader.textContent = '# none';
+  document.getElementById('chatHeaderText').textContent = '# none'; document.getElementById('dmCallBtn').style.display = 'none';
   channelList.innerHTML = '';
   messagesBox.innerHTML = '';
   onlineList.innerHTML  = '';
@@ -1250,7 +1250,7 @@ function joinChannel(ch) {
   stopListeners();
   inDM = false;
   currentChannel = ch;
-  chatHeader.textContent = '# ' + ch;
+  document.getElementById('chatHeaderText').textContent = '# ' + ch;
   document.getElementById('dmCallBtn').style.display = 'none';
   messagesBox.innerHTML  = '';
   onlineList.innerHTML   = '';
@@ -1704,7 +1704,7 @@ document.getElementById('chCtxDelete').addEventListener('click', async () => {
   if (!chCtxChannel) return;
   if (!confirm('Delete #' + chCtxChannel + '? This cannot be undone.')) return;
   await deleteDoc(doc(db, 'servers', currentServer, 'channels', chCtxChannel));
-  if (currentChannel === chCtxChannel) { messagesBox.innerHTML = ''; chatHeader.textContent = '# none'; }
+  if (currentChannel === chCtxChannel) { messagesBox.innerHTML = ''; document.getElementById('chatHeaderText').textContent = '# none'; document.getElementById('dmCallBtn').style.display = 'none'; }
   await selectServer(currentServer);
 });
 
@@ -1941,7 +1941,7 @@ async function loadDMList() {
 
   serverHeader.textContent = 'Direct Messages';
   inviteBadge.style.display = 'none';
-  chatHeader.textContent = 'DMs';
+  document.getElementById('chatHeaderText').textContent = 'DMs'; document.getElementById('dmCallBtn').style.display = 'none';
   channelList.innerHTML  = '';
   messagesBox.innerHTML  = '';
   onlineList.innerHTML   = '';
@@ -1991,7 +1991,7 @@ function openDM(uid, username) {
   inDM = true;
   currentDMUid  = uid;
   currentDMName = username;
-  chatHeader.firstChild.textContent = 'DM with ' + username;
+  document.getElementById('chatHeaderText').textContent = 'DM with ' + username;
   document.getElementById('dmCallBtn').style.display = 'inline-block';
   messagesBox.innerHTML = '';
   onlineList.innerHTML  = '';
