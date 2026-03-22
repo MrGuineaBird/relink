@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <title>RELINK</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="google-site-verification" content="9AHzloNzCGXCnzi8LGMdIUoTnvdxaqkAsa_Ua7Qyka0" />
   <style>
     :root {
       --bg: #0e1621;
@@ -364,18 +363,30 @@
     .vc-participant.muted .vc-participant-avatar { box-shadow:0 0 0 2px #ed4245 }
     .vc-mute-icon { font-size:10px; margin-left:auto; opacity:0.8 }
 
-    /* VC active bar (bottom of sidebar) */
-    .vc-active-bar { background:#1a2a1a; border-top:1px solid #2d4a2d; padding:8px 10px; font-size:12px; display:none }
-    .vc-active-bar.visible { display:block }
-    .vc-active-bar-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px }
-    .vc-active-bar-name { color:#3ba55c; font-weight:600; font-size:13px }
-    .vc-active-bar-server { color:var(--text-muted); font-size:11px }
-    .vc-controls { display:flex; gap:6px; margin-top:6px }
-    .vc-ctrl-btn { flex:1; padding:5px; border-radius:6px; border:none; background:rgba(255,255,255,0.07); color:var(--text); cursor:pointer; font-size:13px; transition:background .2s }
-    .vc-ctrl-btn:hover { background:rgba(255,255,255,0.14) }
-    .vc-ctrl-btn.active { background:#3ba55c; color:#fff }
-    .vc-ctrl-btn.leave { background:#7c2d2d; color:#fff }
-    .vc-ctrl-btn.leave:hover { background:#993a3a }
+    /* VC active bar — Discord style */
+    .vc-active-bar { background:#161b22; border-top:1px solid rgba(255,255,255,0.06); display:none; flex-direction:column }
+    .vc-active-bar.visible { display:flex }
+    /* Top section — voice status + action icons */
+    .vc-status-row { display:flex; align-items:center; padding:8px 8px 6px; gap:6px }
+    .vc-status-left { display:flex; flex-direction:column; gap:1px; min-width:0; flex:1 }
+    .vc-active-bar-name { color:#3ba55c; font-weight:600; font-size:12px; display:flex; align-items:center; gap:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .vc-active-bar-server { color:var(--text-muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .vc-status-right { display:flex; gap:2px; flex-shrink:0 }
+    .vc-icon-btn { width:30px; height:30px; border-radius:6px; border:none; background:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s, color .15s; flex-shrink:0 }
+    .vc-icon-btn:hover { background:rgba(255,255,255,0.1); color:var(--text) }
+    .vc-icon-btn.active { color:#fff; background:rgba(255,255,255,0.12) }
+    .vc-icon-btn.danger:hover { background:rgba(237,66,69,0.2); color:#ed4245 }
+    /* Divider */
+    .vc-divider { height:1px; background:rgba(255,255,255,0.06); margin:0 }
+    /* Bottom section — user avatar + name + mic/settings */
+    .vc-user-row { display:flex; align-items:center; gap:6px; padding:6px 8px 8px }
+    .vc-user-avatar { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; overflow:hidden; flex-shrink:0; position:relative }
+    .vc-user-avatar img { width:100%; height:100%; object-fit:cover }
+    .vc-user-status { position:absolute; bottom:-1px; right:-1px; width:11px; height:11px; border-radius:50%; background:#3ba55c; border:2px solid #161b22 }
+    .vc-user-info { flex:1; min-width:0 }
+    .vc-user-name { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .vc-user-tag { font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .vc-user-controls { display:flex; gap:1px; flex-shrink:0 }
 
     /* Screen share grid */
     .screenshare-overlay { display:none; background:#0a0d14; border-bottom:1px solid #242629; min-height:0; overflow:hidden }
@@ -504,17 +515,42 @@
     </div>
     <div class="channel-list" id="channelList"></div>
     <div class="vc-active-bar" id="vcActiveBar">
-      <div class="vc-active-bar-top">
-        <div>
-          <div class="vc-active-bar-name" id="vcActiveBarName"><img class="ri-sm" src="relinkicons/voiceconnected.svg" alt="vc"> Voice Connected</div>
+      <!-- Top: voice status + action icons -->
+      <div class="vc-status-row">
+        <div class="vc-status-left">
+          <div class="vc-active-bar-name" id="vcActiveBarName">
+            <img class="ri-sm" src="relinkicons/voiceconnected.svg" alt="vc" style="opacity:.8"> Voice Connected
+          </div>
           <div class="vc-active-bar-server" id="vcActiveBarServer"></div>
         </div>
+        <div class="vc-status-right">
+          <button class="vc-icon-btn" id="vcCamBtn" title="Camera">📷</button>
+          <button class="vc-icon-btn" id="vcShareBtn" title="Share Screen">
+            <img class="ri-sm" src="relinkicons/screenshare.svg" alt="share">
+          </button>
+          <button class="vc-icon-btn danger" id="vcLeaveBtn" title="Disconnect">
+            <img class="ri-sm" src="relinkicons/leavevc.svg" alt="leave">
+          </button>
+        </div>
       </div>
-      <div class="vc-controls">
-        <button class="vc-ctrl-btn" id="vcMuteBtn" title="Mute"><img class="ri-sm" src="relinkicons/mutebutton.svg" alt="mute"> Mute</button>
-        <button class="vc-ctrl-btn" id="vcCamBtn" title="Camera">📷 Cam</button>
-        <button class="vc-ctrl-btn" id="vcShareBtn" title="Share Screen"><img class="ri-sm" src="relinkicons/screenshare.svg" alt="share"> Share</button>
-        <button class="vc-ctrl-btn leave" id="vcLeaveBtn"><img class="ri-sm" src="relinkicons/leavevc.svg" alt="leave"> Leave</button>
+      <div class="vc-divider"></div>
+      <!-- Bottom: user info + mic -->
+      <div class="vc-user-row">
+        <div class="vc-user-avatar" id="vcBarAvatar">
+          <div class="vc-user-status"></div>
+        </div>
+        <div class="vc-user-info">
+          <div class="vc-user-name" id="vcBarName"></div>
+          <div class="vc-user-tag" id="vcBarTag"></div>
+        </div>
+        <div class="vc-user-controls">
+          <button class="vc-icon-btn" id="vcMuteBtn" title="Mute">
+            <img class="ri-sm" src="relinkicons/mutebutton.svg" alt="mute">
+          </button>
+          <button class="vc-icon-btn" id="vcSettingsBtn" title="User Settings" onclick="openProfileModal()">
+            <img class="ri-sm" src="relinkicons/settings.svg" alt="settings">
+          </button>
+        </div>
       </div>
     </div>
     <div class="channel-actions">
@@ -946,8 +982,12 @@ onAuthStateChanged(auth, async user => {
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('verifyScreen').style.display = 'none';
     document.getElementById('app').style.display = 'none';
-    if (unsubMessages) { unsubMessages(); unsubMessages = null; }
-    if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+    if (unsubMessages)        { unsubMessages(); unsubMessages = null; }
+    if (unsubPresence)        { unsubPresence(); unsubPresence = null; }
+    if (unsubTyping)          { unsubTyping();   unsubTyping = null; }
+    if (unsubFriends)         { unsubFriends();  unsubFriends = null; }
+    if (unsubDmCallIncoming)  { unsubDmCallIncoming(); unsubDmCallIncoming = null; }
+    if (unsubSignals)         { unsubSignals();  unsubSignals = null; }
   }
 });
 
@@ -1042,6 +1082,24 @@ document.getElementById('profileConfirm').addEventListener('click', async () => 
   myBio = bio;
   if (profileAvatarPending) myAvatar = profileAvatarPending;
   updateProfileBar();
+
+  // Update presence so others see new name/avatar immediately
+  if (currentServer && currentChannel) {
+    try {
+      await updateDoc(doc(db, 'servers', currentServer, 'presence', currentUser.uid), {
+        displayName, avatar: myAvatar || null
+      });
+    } catch (_) {}
+  }
+  // Update VC participant if in a voice channel
+  if (currentServer && currentVcChannel) {
+    try {
+      await updateDoc(doc(db, 'servers', currentServer, 'vc', currentVcChannel, 'participants', currentUser.uid), {
+        displayName, avatar: myAvatar || null
+      });
+    } catch (_) {}
+  }
+
   closeProfileModal();
 });
 
@@ -1420,6 +1478,11 @@ function stopListeners() {
   if (unsubMessages) { unsubMessages(); unsubMessages = null; }
   if (unsubPresence) { unsubPresence(); unsubPresence = null; }
   if (unsubTyping)   { unsubTyping();   unsubTyping = null; }
+  if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
+  // Clear our typing indicator for others when leaving channel
+  if (currentServer && currentChannel && currentUser) {
+    deleteDoc(doc(db, 'servers', currentServer, 'channels', currentChannel, 'typing', currentUser.uid)).catch(() => {});
+  }
 }
 
 function joinChannel(ch) {
@@ -1793,9 +1856,18 @@ function listenTyping(serverId, channelId) {
     collection(db, 'servers', serverId, 'channels', channelId, 'typing'),
     snap => {
       const now = Date.now();
-      const names = snap.docs
-        .filter(d => d.id !== currentUser?.uid && d.data().ts && (now - d.data().ts.toMillis() < 5000))
-        .map(d => d.data().displayName || d.data().username);
+      const names = [];
+      snap.docs.forEach(d => {
+        const ts = d.data().ts;
+        const age = ts ? now - ts.toMillis() : Infinity;
+        if (d.id === currentUser?.uid) return;
+        if (age > 5000) {
+          // Stale — delete it so it doesn't pile up
+          deleteDoc(d.ref).catch(() => {});
+        } else {
+          names.push(d.data().displayName || d.data().username);
+        }
+      });
       const el = document.getElementById('typingIndicator');
       if (names.length === 0) el.textContent = '';
       else if (names.length === 1) el.textContent = `${names[0]} is typing…`;
@@ -1910,9 +1982,29 @@ document.getElementById('chCtxRename').addEventListener('click', async () => {
   const newName = prompt('New name for #' + chCtxChannel + ':');
   if (!newName) return;
   const clean = newName.trim().toLowerCase().replace(/\s+/g, '-');
+  if (clean === chCtxChannel) return;
+
   const oldRef = doc(db, 'servers', currentServer, 'channels', chCtxChannel);
   const oldData = (await getDoc(oldRef)).data();
+
+  // Create new channel doc
   await setDoc(doc(db, 'servers', currentServer, 'channels', clean), { ...oldData, name: clean });
+
+  // Copy all messages to the new channel
+  const msgsSnap = await getDocs(
+    query(collection(db, 'servers', currentServer, 'channels', chCtxChannel, 'messages'), orderBy('ts'))
+  );
+  for (const msgDoc of msgsSnap.docs) {
+    await setDoc(
+      doc(db, 'servers', currentServer, 'channels', clean, 'messages', msgDoc.id),
+      msgDoc.data()
+    );
+  }
+
+  // Delete old channel doc (messages subcollection docs must be deleted individually in client SDK)
+  for (const msgDoc of msgsSnap.docs) {
+    try { await deleteDoc(doc(db, 'servers', currentServer, 'channels', chCtxChannel, 'messages', msgDoc.id)); } catch(_) {}
+  }
   await deleteDoc(oldRef);
   await selectServer(currentServer);
 });
@@ -2279,6 +2371,7 @@ async function startNewDM() {
 
 function openDM(uid, username) {
   stopListeners();
+  if (unsubDmCallIncoming) { unsubDmCallIncoming(); unsubDmCallIncoming = null; }
   inDM = true;
   currentDMUid  = uid;
   currentDMName = username;
@@ -2304,7 +2397,7 @@ function openDM(uid, username) {
   listenDMCall(uid);
 }
 
-async function sendDM(text) {
+async function sendDM(text, image) {
   const id = dmId(currentUser.uid, currentDMUid);
   await addDoc(collection(db, 'dms', id, 'messages'), {
     from: myUsername,
@@ -2312,14 +2405,13 @@ async function sendDM(text) {
     fromAvatar: myAvatar || null,
     fromUid: currentUser.uid,
     to: currentDMName, toUid: currentDMUid,
-    text, ts: serverTimestamp()
+    text, image: image || null, ts: serverTimestamp()
   });
   await setDoc(doc(db, 'userDMs', currentUser.uid), { [currentDMUid]: currentDMName }, { merge: true });
   await setDoc(doc(db, 'userDMs', currentDMUid), { [currentUser.uid]: myUsername }, { merge: true });
 }
 
 function appendDM(m) {
-  // Browser notification + badge for incoming DMs
   if (m.fromUid !== currentUser?.uid) {
     sendBrowserNotif('DM from ' + (m.fromDisplayName || m.from), m.text || '📷 image');
     addDmNotif();
@@ -2327,13 +2419,13 @@ function appendDM(m) {
   const div = document.createElement('div');
   div.className = 'message';
 
+  const msgRow = document.createElement('div');
+  msgRow.className = 'msg-row';
+
   const av = document.createElement('div');
   av.className = 'msg-avatar';
-  if (m.fromAvatar) {
-    av.innerHTML = `<img src="${m.fromAvatar}" alt="">`;
-  } else {
-    av.textContent = (m.fromDisplayName || m.from || '?')[0].toUpperCase();
-  }
+  if (m.fromAvatar) { av.innerHTML = `<img src="${m.fromAvatar}" alt="">`; }
+  else { av.textContent = (m.fromDisplayName || m.from || '?')[0].toUpperCase(); }
 
   const body = document.createElement('div');
   body.className = 'msg-body';
@@ -2348,15 +2440,26 @@ function appendDM(m) {
   time.textContent = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
   meta.appendChild(name);
   meta.appendChild(time);
-
-  const txt = document.createElement('div');
-  txt.className = 'msg-text';
-  txt.textContent = m.text;
-
   body.appendChild(meta);
-  body.appendChild(txt);
-  div.appendChild(av);
-  div.appendChild(body);
+
+  if (m.text) {
+    const txt = document.createElement('div');
+    txt.className = 'msg-text';
+    txt.appendChild(renderText(m.text));
+    body.appendChild(txt);
+  }
+  if (m.image) {
+    const img = document.createElement('img');
+    img.className = 'msg-img';
+    img.src = m.image;
+    img.alt = 'image';
+    img.onclick = () => openLightbox(m.image);
+    body.appendChild(img);
+  }
+
+  msgRow.appendChild(av);
+  msgRow.appendChild(body);
+  div.appendChild(msgRow);
   messagesBox.appendChild(div);
 }
 
@@ -2513,6 +2616,13 @@ async function joinVoiceChannel(name) {
   document.getElementById('vcActiveBar').classList.add('visible');
   document.getElementById('vcActiveBarName').innerHTML = '<img class="ri-sm" src="relinkicons/voiceconnected.svg" alt="vc"> ' + name.replace(/^vc-/, '');
   document.getElementById('vcActiveBarServer').textContent = serverHeader.textContent;
+
+  // Populate user row
+  const vcBarAv = document.getElementById('vcBarAvatar');
+  if (myAvatar) vcBarAv.innerHTML = `<img src="${myAvatar}" alt=""><div class="vc-user-status"></div>`;
+  else { vcBarAv.textContent = (myDisplayName || myUsername || '?')[0].toUpperCase(); vcBarAv.insertAdjacentHTML('beforeend', '<div class="vc-user-status"></div>'); }
+  document.getElementById('vcBarName').textContent = myDisplayName || myUsername;
+  document.getElementById('vcBarTag').textContent = '@' + myUsername;
 
   // Fetch existing participants and call those with LOWER uid (prevents double-offer)
   const snap = await getDocs(collection(db, 'servers', currentServer, 'vc', name, 'participants'));
@@ -2806,8 +2916,7 @@ document.getElementById('vcCamBtn').addEventListener('click', async () => {
   } catch (e) { alert('Could not access camera: ' + e.message); return; }
 
   isCameraOn = true;
-  document.getElementById('vcCamBtn').textContent = '📷 Stop';
-  document.getElementById('vcCamBtn').classList.add('active');
+  document.getElementById('vcCamBtn').textContent = '📷'; document.getElementById('vcCamBtn').classList.add('active');
 
   // Show our own camera tile
   addCamTile(currentUser.uid, cameraStream);
@@ -2837,34 +2946,33 @@ document.getElementById('vcCamBtn').addEventListener('click', async () => {
   cameraStream.getVideoTracks()[0].onended = () => stopCamera();
 });
 
-async function stopCamera() {
+async function stopCamera(vcChannelOverride) {
   if (!isCameraOn) return;
   isCameraOn = false;
   if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
   removeCamTile(currentUser.uid);
 
-  document.getElementById('vcCamBtn').textContent = '📷 Cam';
+  document.getElementById('vcCamBtn').textContent = '📷';
   document.getElementById('vcCamBtn').classList.remove('active');
 
-  // Update Firestore
-  if (currentServer && currentVcChannel) {
-    try { await updateDoc(doc(db, 'servers', currentServer, 'vc', currentVcChannel, 'participants', currentUser.uid), { camera: false }); } catch (_) {}
+  const vcCh = vcChannelOverride || currentVcChannel;
+  if (currentServer && vcCh) {
+    try { await updateDoc(doc(db, 'servers', currentServer, 'vc', vcCh, 'participants', currentUser.uid), { camera: false }); } catch (_) {}
   }
 
-  // Remove camera sender and renegotiate
-  for (const [uid, pc] of Object.entries(peerConnections)) {
-    pc.getSenders().forEach(s => {
-      if (s.track?.kind === 'video' && activeTiles[currentUser.uid] === undefined) {
-        try { pc.removeTrack(s); } catch (_) {}
-      }
-    });
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
-        type: 'offer', from: currentUser.uid, sdp: offer.sdp, cameraStreamId: null
+  if (vcCh) {
+    for (const [uid, pc] of Object.entries(peerConnections)) {
+      pc.getSenders().forEach(s => {
+        if (s.track?.kind === 'video' && !isSharing) { try { pc.removeTrack(s); } catch(_){} }
       });
-    } catch (_) {}
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await addDoc(collection(db, 'servers', currentServer, 'vc', vcCh, 'signals', uid, 'inbox'), {
+          type: 'offer', from: currentUser.uid, sdp: offer.sdp, cameraStreamId: null
+        });
+      } catch (_) {}
+    }
   }
 }
 
@@ -2873,9 +2981,9 @@ async function stopCamera() {
 async function leaveVoiceChannel() {
   if (!currentVcChannel) return;
   stopVcHeartbeat();
-  await stopScreenShare();
-  await stopCamera();
   const name = currentVcChannel;
+  await stopScreenShare(name);
+  await stopCamera(name);
   currentVcChannel = null;
 
   if (unsubSignals) { unsubSignals(); unsubSignals = null; }
@@ -2896,8 +3004,10 @@ async function leaveVoiceChannel() {
   document.getElementById('vcActiveBar').classList.remove('visible');
   document.querySelectorAll('.vc-item').forEach(el => el.classList.remove('active'));
   isMuted = false;
-  document.getElementById('vcMuteBtn').innerHTML = '<img src="relinkicons/mutebutton.svg" class="ri-icon"> Mute';
-  document.getElementById('vcMuteBtn').classList.remove('active');
+  document.getElementById('vcMuteBtn').innerHTML = '<img src="relinkicons/mutebutton.svg" class="ri-sm">';
+  document.getElementById('vcMuteBtn').classList.remove('active', 'danger');
+  document.getElementById('vcCamBtn').textContent = '📷';
+  document.getElementById('vcCamBtn').classList.remove('active');
 }
 
 document.getElementById('vcMuteBtn').addEventListener('click', async () => {
@@ -2905,8 +3015,9 @@ document.getElementById('vcMuteBtn').addEventListener('click', async () => {
   isMuted = !isMuted;
   localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
   const btn = document.getElementById('vcMuteBtn');
-  btn.innerHTML = isMuted ? '<img src="relinkicons/muted.svg" class="ri-icon"> Unmute' : '<img src="relinkicons/mutebutton.svg" class="ri-icon"> Mute';
-  btn.classList.toggle('active', isMuted);
+  btn.innerHTML = isMuted ? '<img src="relinkicons/muted.svg" class="ri-sm">' : '<img src="relinkicons/mutebutton.svg" class="ri-sm">';
+  btn.classList.toggle('danger', isMuted);
+  btn.classList.remove('active');
   // Sync mute state to Firestore so others can see it
   if (currentServer && currentVcChannel && currentUser) {
     try {
@@ -2918,7 +3029,7 @@ document.getElementById('vcMuteBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('vcShareBtn').addEventListener('click', async () => {
-  if (isSharing) { stopScreenShare(); return; }
+  if (isSharing) { await stopScreenShare(); return; }
   if (!currentVcChannel) return alert('Join a voice channel first.');
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -2976,27 +3087,27 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
   if (audioTrack) audioTrack.onended = () => stopScreenShare();
 });
 
-async function stopScreenShare() {
+async function stopScreenShare(vcChannelOverride) {
   if (!isSharing) return;
   isSharing = false;
   if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
 
   removeShareTile(currentUser.uid);
 
-  // Remove ALL screen share senders (video + system audio)
-  for (const pc of Object.values(peerConnections)) {
+  const vcCh = vcChannelOverride || currentVcChannel;
+  if (!vcCh) { document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon"> Share'; document.getElementById('vcShareBtn').classList.remove('active'); return; }
+
+  for (const [uid, pc] of Object.entries(peerConnections)) {
     pc.getSenders().forEach(sender => {
       if (sender.track && (sender.track.kind === 'video' ||
           (sender.track.kind === 'audio' && sender.track.label !== localStream?.getAudioTracks()[0]?.label))) {
         try { pc.removeTrack(sender); } catch (_) {}
       }
     });
-    // Renegotiate after removing tracks
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals',
-        Object.keys(peerConnections).find(k => peerConnections[k] === pc), 'inbox'), {
+      await addDoc(collection(db, 'servers', currentServer, 'vc', vcCh, 'signals', uid, 'inbox'), {
         type: 'offer', from: currentUser.uid, sdp: offer.sdp
       });
     } catch (_) {}
@@ -3064,6 +3175,20 @@ function handleTabClose() {
   }
   if (currentServer && currentUser) {
     firestoreDeleteBeacon(`servers/${currentServer}/presence/${currentUser.uid}`);
+  }
+  // Mark any active DM call as ended so the other person's ring clears
+  if (dmCallActive && dmCallPartnerId && currentUser) {
+    const cid = [currentUser.uid, dmCallPartnerId].sort().join('_');
+    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/dmCalls/${cid}`;
+    // PATCH to set status=ended
+    if (cachedAuthToken) {
+      fetch(url, {
+        method: 'PATCH',
+        keepalive: true,
+        headers: { Authorization: `Bearer ${cachedAuthToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { status: { stringValue: 'ended' } } })
+      }).catch(() => {});
+    }
   }
 }
 
@@ -3287,12 +3412,15 @@ async function initDMCallRTC(cid, isCaller) {
 function listenDMCall(partnerUid) {
   if (unsubDmCallIncoming) { unsubDmCallIncoming(); unsubDmCallIncoming = null; }
   const cid = dmCallId(currentUser.uid, partnerUid);
+  let lastRingingShown = false;
   unsubDmCallIncoming = onSnapshot(doc(db, 'dmCalls', cid), snap => {
-    if (!snap.exists()) return;
+    if (!snap.exists()) { lastRingingShown = false; return; }
     const data = snap.data();
-    if (data.status === 'ringing' && data.calleeId === currentUser.uid && !dmCallActive) {
+    if (data.status === 'ringing' && data.calleeId === currentUser.uid && !dmCallActive && !lastRingingShown) {
+      lastRingingShown = true;
       showIncomingCall(data, cid);
     }
+    if (data.status !== 'ringing') lastRingingShown = false;
     if (data.status === 'ended' && dmCallActive) { endDMCall(false); }
   });
 }
@@ -3550,7 +3678,18 @@ async function stopDMShare() {
   if (dmScreenStream) { dmScreenStream.getTracks().forEach(t => t.stop()); dmScreenStream = null; }
   removeDmShareTile(currentUser.uid);
   if (dmCallPc) {
-    dmCallPc.getSenders().forEach(s => { if (s.track?.kind === 'video') { try { dmCallPc.removeTrack(s); } catch(_){} } });
+    dmCallPc.getSenders().forEach(s => {
+      if (s.track?.kind === 'video') { try { dmCallPc.removeTrack(s); } catch(_){} }
+    });
+    // Renegotiate so remote peer stops receiving the video
+    try {
+      const cid = dmCallId(currentUser.uid, dmCallPartnerId);
+      const offer = await dmCallPc.createOffer();
+      await dmCallPc.setLocalDescription(offer);
+      await updateDoc(doc(db, 'dmCalls', cid), {
+        reofferSdp: offer.sdp, reofferFrom: currentUser.uid, reofferAnswerSdp: null
+      });
+    } catch(_) {}
   }
   document.getElementById('dmCallShareBtn').classList.remove('active');
 }
@@ -3735,8 +3874,9 @@ async function startDMWithUid(uid, username) {
 
 // Listen for incoming friend requests and badge the friends button
 function listenFriendRequests() {
+  if (unsubFriends) { unsubFriends(); unsubFriends = null; }
   if (!currentUser) return;
-  onSnapshot(query(collection(db, 'friendRequests'), where('toUid', '==', currentUser.uid)), snap => {
+  unsubFriends = onSnapshot(query(collection(db, 'friendRequests'), where('toUid', '==', currentUser.uid)), snap => {
     const badge = document.getElementById('friendReqBadge');
     if (snap.size > 0) {
       badge.textContent = snap.size > 9 ? '9+' : snap.size;
