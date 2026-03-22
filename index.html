@@ -216,6 +216,40 @@
     /* Server btn with avatar image */
     .server-btn img { width:100%; height:100%; object-fit:cover; border-radius:14px; pointer-events:none; user-select:none }
 
+    /* Notification badge */
+    .notif-wrap { position:relative; flex-shrink:0 }
+    .notif-badge { position:absolute; bottom:-3px; right:-3px; min-width:16px; height:16px; background:#ed4245; border-radius:8px; border:2px solid var(--muted); font-size:10px; font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center; padding:0 3px; pointer-events:none; box-sizing:border-box; line-height:1 }
+    .notif-badge.hidden { display:none }
+
+    /* DM Call overlay */
+    .dm-call-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:600; flex-direction:column; align-items:center; justify-content:center; gap:24px }
+    .dm-call-overlay.visible { display:flex }
+    .dm-call-avatars { display:flex; gap:24px; align-items:center }
+    .dm-call-avatar { display:flex; flex-direction:column; align-items:center; gap:8px }
+    .dm-call-avatar-img { width:80px; height:80px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:700; overflow:hidden; border:3px solid transparent; transition:border-color .2s }
+    .dm-call-avatar-img img { width:100%; height:100%; object-fit:cover }
+    .dm-call-avatar-img.speaking { border-color:#3ba55c }
+    .dm-call-avatar-name { font-size:13px; color:rgba(255,255,255,0.8); font-weight:600 }
+    .dm-call-status { font-size:14px; color:rgba(255,255,255,0.5); font-style:italic }
+    .dm-call-controls { display:flex; gap:12px; background:rgba(255,255,255,0.08); backdrop-filter:blur(10px); padding:12px 20px; border-radius:40px; border:1px solid rgba(255,255,255,0.1) }
+    .dm-call-btn { width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; transition:background .2s, transform .1s; background:rgba(255,255,255,0.12); color:#fff }
+    .dm-call-btn:hover { background:rgba(255,255,255,0.2); transform:scale(1.08) }
+    .dm-call-btn.active { background:rgba(255,255,255,0.3) }
+    .dm-call-btn.end { background:#ed4245; width:52px; height:52px; font-size:20px }
+    .dm-call-btn.end:hover { background:#c0373a }
+
+    /* Incoming call ring */
+    .dm-call-ring { display:none; position:fixed; bottom:24px; right:24px; background:#1e2736; border-radius:16px; padding:16px 20px; z-index:700; box-shadow:0 8px 32px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.1); min-width:280px }
+    .dm-call-ring.visible { display:block }
+    .dm-call-ring-name { font-weight:700; font-size:15px; margin-bottom:4px }
+    .dm-call-ring-sub { font-size:12px; color:var(--text-muted); margin-bottom:14px }
+    .dm-call-ring-btns { display:flex; gap:10px }
+    .dm-call-ring-btn { flex:1; padding:9px; border-radius:8px; border:none; font-size:14px; font-weight:600; cursor:pointer; transition:background .2s }
+    .dm-call-ring-accept { background:#3ba55c; color:#fff }
+    .dm-call-ring-accept:hover { background:#2d8a4a }
+    .dm-call-ring-decline { background:#ed4245; color:#fff }
+    .dm-call-ring-decline:hover { background:#c0373a }
+
     /* Profile card popup */
     .profile-card { display:none; position:fixed; width:300px; background:#1a1f2e; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.6); z-index:300; overflow:hidden; border:1px solid rgba(255,255,255,0.07) }
     .profile-card.open { display:block }
@@ -361,7 +395,10 @@
 <!-- Main App (hidden until login) -->
 <div class="app" id="app" style="display:none;">
   <div class="servers" id="serversCol">
-    <div class="server-btn" id="homeBtn" title="Direct Messages" style="margin-top:4px">R</div>
+    <div class="notif-wrap">
+      <div class="server-btn" id="homeBtn" title="Direct Messages" style="margin-top:4px">R</div>
+      <div class="notif-badge hidden" id="dmBadge"></div>
+    </div>
     <div class="server-btn create" id="createServerBtn" title="Create or Join Server">+</div>
     <div class="profile-bar">
       <div class="profile-avatar" id="profileAvatarBtn" title="Your profile"></div>
@@ -395,7 +432,7 @@
   </div>
 
   <div class="chat">
-    <div class="chat-header" id="chatHeader"># none</div>
+    <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between"># none<button id="dmCallBtn" style="display:none;background:none;border:none;color:#3ba55c;cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px" title="Start voice call">📞</button></div>
     <div class="screenshare-overlay" id="screenshareOverlay">
       <div class="screenshare-grid" id="screenshareGrid"></div>
     </div>
@@ -450,6 +487,36 @@
   <div class="ctx-item" id="chCtxRename">✏️ Rename Channel</div>
   <div class="ctx-divider"></div>
   <div class="ctx-item danger" id="chCtxDelete">🗑️ Delete Channel</div>
+</div>
+
+<!-- DM Call Overlay -->
+<div class="dm-call-overlay" id="dmCallOverlay">
+  <div class="dm-call-avatars">
+    <div class="dm-call-avatar">
+      <div class="dm-call-avatar-img" id="dmCallMyAvatar"></div>
+      <div class="dm-call-avatar-name" id="dmCallMyName"></div>
+    </div>
+    <div style="font-size:24px;color:rgba(255,255,255,0.3)">⟷</div>
+    <div class="dm-call-avatar">
+      <div class="dm-call-avatar-img" id="dmCallTheirAvatar"></div>
+      <div class="dm-call-avatar-name" id="dmCallTheirName"></div>
+    </div>
+  </div>
+  <div class="dm-call-status" id="dmCallStatus">Calling…</div>
+  <div class="dm-call-controls">
+    <button class="dm-call-btn" id="dmCallMuteBtn" title="Mute">🎤</button>
+    <button class="dm-call-btn end" id="dmCallEndBtn" title="End call">📵</button>
+  </div>
+</div>
+
+<!-- Incoming Call Ring -->
+<div class="dm-call-ring" id="dmCallRing">
+  <div class="dm-call-ring-name" id="dmCallRingName">Someone</div>
+  <div class="dm-call-ring-sub">Incoming voice call…</div>
+  <div class="dm-call-ring-btns">
+    <button class="dm-call-ring-btn dm-call-ring-accept" id="dmCallAcceptBtn">✅ Accept</button>
+    <button class="dm-call-ring-btn dm-call-ring-decline" id="dmCallDeclineBtn">❌ Decline</button>
+  </div>
 </div>
 
 <!-- User Profile Modal -->
@@ -621,6 +688,8 @@ let unsubMessages  = null;
 let unsubPresence  = null;
 let replyingTo     = null;
 let typingTimeout  = null;
+const serverNotifCounts = {}; // serverId → unread count
+let dmNotifCount = 0;
 let unsubTyping    = null;
 let emojiTargetMsgId = null;
 let emojiTargetRef   = null;
@@ -1033,33 +1102,43 @@ async function loadMyServers() {
   if (!currentUser) return;
   const snap = await getDocs(query(collection(db, 'servers'), where('members', 'array-contains', currentUser.uid)));
 
-  // Only rebuild the server icon buttons — leave profile bar intact
   let iconsContainer = document.getElementById('serverIconsList');
   if (!iconsContainer) {
     iconsContainer = document.createElement('div');
     iconsContainer.id = 'serverIconsList';
     iconsContainer.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;width:100%';
-    // Insert after homeBtn
     const homeBtn = document.getElementById('homeBtn');
-    homeBtn.insertAdjacentElement('afterend', iconsContainer);
+    homeBtn.closest('.notif-wrap').insertAdjacentElement('afterend', iconsContainer);
   }
   iconsContainer.innerHTML = '';
 
   snap.docs.forEach(d => {
     const s = d.data();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'notif-wrap';
+    wrap.id = 'server-wrap-' + d.id;
+
     const btn = document.createElement('div');
     btn.className = 'server-btn' + (d.id === currentServer ? ' active' : '');
     btn.title = s.name;
-    if (s.icon) {
-      btn.innerHTML = `<img src="${s.icon}" alt="${s.name}">`;
-    } else {
-      btn.textContent = s.name[0].toUpperCase();
-    }
+    btn.id = 'server-btn-' + d.id;
+    if (s.icon) { btn.innerHTML = `<img src="${s.icon}" alt="${s.name}">`; }
+    else { btn.textContent = s.name[0].toUpperCase(); }
     btn.onclick = () => selectServer(d.id);
     if (s.ownerUid === currentUser.uid) {
       btn.addEventListener('contextmenu', e => showCtxMenu(e, d.id, s));
     }
-    iconsContainer.appendChild(btn);
+
+    const badge = document.createElement('div');
+    badge.className = 'notif-badge hidden';
+    badge.id = 'server-badge-' + d.id;
+    const count = serverNotifCounts[d.id] || 0;
+    if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.classList.remove('hidden'); }
+
+    wrap.appendChild(btn);
+    wrap.appendChild(badge);
+    iconsContainer.appendChild(wrap);
   });
 }
 
@@ -1084,6 +1163,7 @@ async function selectServer(serverId) {
   const isOwner = serverData.ownerUid === currentUser.uid;
   document.getElementById('addChannelBtn').style.display = isOwner ? 'inline-block' : 'none';
   document.getElementById('addVcBtn').style.display = isOwner ? 'inline-block' : 'none';
+  clearServerNotif(serverId);
 
   const chSnap = await getDocs(query(collection(db, 'servers', serverId, 'channels'), orderBy('createdAt')));
 
@@ -1171,6 +1251,7 @@ function joinChannel(ch) {
   inDM = false;
   currentChannel = ch;
   chatHeader.textContent = '# ' + ch;
+  document.getElementById('dmCallBtn').style.display = 'none';
   messagesBox.innerHTML  = '';
   onlineList.innerHTML   = '';
   cancelReply();
@@ -1342,8 +1423,14 @@ function appendMessage(m, msgId) {
   div.appendChild(msgRow);
   messagesBox.appendChild(div);
 
-  // Browser notification for mentions
-  if (isMentioned(m.text) && m.uid !== currentUser?.uid) sendBrowserNotif(m.displayName || m.username, m.text);
+  // Browser notification + badge for mentions
+  if (isMentioned(m.text) && m.uid !== currentUser?.uid) {
+    sendBrowserNotif(m.displayName || m.username, m.text);
+    addServerNotif(currentServer);
+  } else if (m.uid !== currentUser?.uid) {
+    // Non-mention message — still badge if not the active server
+    addServerNotif(currentServer);
+  }
 }
 
 function makeActionBtn(icon, title, handler) {
@@ -1526,6 +1613,53 @@ function sendBrowserNotif(fromName, text) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (document.hasFocus()) return;
   new Notification('RELINK — ' + fromName, { body: text });
+}
+
+// ── Notification badge helpers ─────────────────────────────────────
+function addServerNotif(serverId) {
+  // Don't badge the server you're currently viewing
+  if (serverId === currentServer) return;
+  serverNotifCounts[serverId] = (serverNotifCounts[serverId] || 0) + 1;
+  updateServerBadge(serverId);
+}
+
+function clearServerNotif(serverId) {
+  serverNotifCounts[serverId] = 0;
+  updateServerBadge(serverId);
+}
+
+function updateServerBadge(serverId) {
+  const badge = document.getElementById('server-badge-' + serverId);
+  if (!badge) return;
+  const count = serverNotifCounts[serverId] || 0;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function addDmNotif() {
+  if (inDM) return; // already in DM view
+  dmNotifCount++;
+  updateDmBadge();
+}
+
+function clearDmNotif() {
+  dmNotifCount = 0;
+  updateDmBadge();
+}
+
+function updateDmBadge() {
+  const badge = document.getElementById('dmBadge');
+  if (!badge) return;
+  if (dmNotifCount > 0) {
+    badge.textContent = dmNotifCount > 99 ? '99+' : dmNotifCount;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1803,6 +1937,7 @@ async function loadDMList() {
   currentChannel = null;
   currentDMUid   = null;
   currentInvite  = null;
+  clearDmNotif();
 
   serverHeader.textContent = 'Direct Messages';
   inviteBadge.style.display = 'none';
@@ -1856,7 +1991,8 @@ function openDM(uid, username) {
   inDM = true;
   currentDMUid  = uid;
   currentDMName = username;
-  chatHeader.textContent = 'DM with ' + username;
+  chatHeader.firstChild.textContent = 'DM with ' + username;
+  document.getElementById('dmCallBtn').style.display = 'inline-block';
   messagesBox.innerHTML = '';
   onlineList.innerHTML  = '';
 
@@ -1872,6 +2008,9 @@ function openDM(uid, username) {
     });
     messagesBox.scrollTop = messagesBox.scrollHeight;
   });
+
+  // Listen for incoming call from this DM partner
+  listenDMCall(uid);
 }
 
 async function sendDM(text) {
@@ -1889,9 +2028,10 @@ async function sendDM(text) {
 }
 
 function appendDM(m) {
-  // Browser notification for incoming DMs
+  // Browser notification + badge for incoming DMs
   if (m.fromUid !== currentUser?.uid) {
     sendBrowserNotif('DM from ' + (m.fromDisplayName || m.from), m.text || '📷 image');
+    addDmNotif();
   }
   const div = document.createElement('div');
   div.className = 'message';
@@ -2465,6 +2605,248 @@ onAuthStateChanged(auth, async user => {
     requestNotifPermission();
   } else { cachedAuthToken = null; }
 });
+
+// ══════════════════════════════════════════════════════════════════
+//  DM VOICE CALLS
+// ══════════════════════════════════════════════════════════════════
+
+let dmCallPc          = null;
+let dmCallStream      = null;
+let dmCallMuted       = false;
+let dmCallActive      = false;
+let dmCallPartnerId   = null;
+let unsubDmCall       = null;
+let dmCallVADSelf     = null;
+let dmCallVADThem     = null;
+
+function dmCallId(uid1, uid2) { return [uid1, uid2].sort().join('_'); }
+
+// Show/hide call button when entering/leaving DM view
+document.getElementById('dmCallBtn').addEventListener('click', startDMCall);
+
+function setDMCallAvatarEl(elId, userData) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (userData?.avatar) { el.innerHTML = `<img src="${userData.avatar}" alt="">`; }
+  else { el.textContent = (userData?.displayName || userData?.username || '?')[0].toUpperCase(); }
+}
+
+async function startDMCall() {
+  if (dmCallActive) return;
+  if (!currentDMUid) return;
+
+  try {
+    dmCallStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) { alert('Microphone access denied.'); return; }
+
+  dmCallActive    = true;
+  dmCallPartnerId = currentDMUid;
+  const cid = dmCallId(currentUser.uid, currentDMUid);
+
+  // Write call doc — signals the other person
+  await setDoc(doc(db, 'dmCalls', cid), {
+    callerId:      currentUser.uid,
+    callerName:    myDisplayName || myUsername,
+    callerAvatar:  myAvatar || null,
+    calleeId:      currentDMUid,
+    status:        'ringing',
+    ts:            serverTimestamp()
+  });
+
+  showCallOverlay('Calling…', currentDMUid);
+  startDMCallVAD('self', dmCallStream);
+
+  // Wait for callee to accept
+  listenDMCallDoc(cid);
+}
+
+function showCallOverlay(status, partnerId) {
+  const overlay = document.getElementById('dmCallOverlay');
+  overlay.classList.add('visible');
+  document.getElementById('dmCallStatus').textContent = status;
+
+  // My avatar
+  setDMCallAvatarEl('dmCallMyAvatar', { displayName: myDisplayName || myUsername, avatar: myAvatar });
+  document.getElementById('dmCallMyName').textContent = myDisplayName || myUsername;
+
+  // Their avatar — try vcParticipantData or fetch
+  const partnerData = { uid: partnerId, displayName: currentDMName, username: currentDMName };
+  setDMCallAvatarEl('dmCallTheirAvatar', partnerData);
+  document.getElementById('dmCallTheirName').textContent = currentDMName || partnerId;
+}
+
+function listenDMCallDoc(cid) {
+  if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
+  unsubDmCall = onSnapshot(doc(db, 'dmCalls', cid), async snap => {
+    if (!snap.exists()) { endDMCall(false); return; }
+    const data = snap.data();
+    if (data.status === 'accepted' && data.callerId === currentUser.uid) {
+      // Callee accepted — start WebRTC as caller
+      document.getElementById('dmCallStatus').textContent = 'Connected';
+      await initDMCallRTC(cid, true);
+    }
+    if (data.status === 'ended') { endDMCall(false); }
+    // Handle signaling
+    if (data.callerSdp && data.calleeId === currentUser.uid && !dmCallPc?.remoteDescription) {
+      await handleDMCallOffer(data, cid);
+    }
+    if (data.calleeSdp && data.callerId === currentUser.uid && dmCallPc && !dmCallPc.remoteDescription) {
+      await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.calleeSdp });
+      flushDMCallICE();
+    }
+    if (data.iceCallee && data.callerId === currentUser.uid) {
+      for (const c of data.iceCallee) {
+        try { if (dmCallPc?.remoteDescription) await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+      }
+    }
+    if (data.iceCaller && data.calleeId === currentUser.uid) {
+      for (const c of data.iceCaller) {
+        try { if (dmCallPc?.remoteDescription) await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+      }
+    }
+  });
+}
+
+let dmCallIceQueue = [];
+
+async function initDMCallRTC(cid, isCaller) {
+  dmCallPc = new RTCPeerConnection(ICE_SERVERS);
+  dmCallStream.getTracks().forEach(t => dmCallPc.addTrack(t, dmCallStream));
+
+  dmCallPc.onicecandidate = async e => {
+    if (!e.candidate) return;
+    const field = isCaller ? 'iceCaller' : 'iceCallee';
+    await updateDoc(doc(db, 'dmCalls', cid), { [field]: arrayUnion(e.candidate.toJSON()) });
+  };
+
+  dmCallPc.ontrack = e => {
+    let audio = document.getElementById('dm-call-audio');
+    if (!audio) { audio = document.createElement('audio'); audio.id = 'dm-call-audio'; document.body.appendChild(audio); }
+    audio.autoplay = true;
+    audio.srcObject = e.streams[0];
+    startDMCallVAD('them', e.streams[0]);
+    document.getElementById('dmCallStatus').textContent = 'Connected';
+  };
+
+  if (isCaller) {
+    const offer = await dmCallPc.createOffer();
+    await dmCallPc.setLocalDescription(offer);
+    await updateDoc(doc(db, 'dmCalls', cid), { callerSdp: offer.sdp });
+  }
+}
+
+async function handleDMCallOffer(data, cid) {
+  await initDMCallRTC(cid, false);
+  await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
+  const answer = await dmCallPc.createAnswer();
+  await dmCallPc.setLocalDescription(answer);
+  await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
+}
+
+function flushDMCallICE() {
+  dmCallIceQueue.forEach(async c => {
+    try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+  });
+  dmCallIceQueue = [];
+}
+
+// Listen for incoming calls from the current DM partner
+function listenDMCall(partnerUid) {
+  if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
+  const cid = dmCallId(currentUser.uid, partnerUid);
+  unsubDmCall = onSnapshot(doc(db, 'dmCalls', cid), snap => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (data.status === 'ringing' && data.calleeId === currentUser.uid && !dmCallActive) {
+      showIncomingCall(data, cid);
+    }
+    if (data.status === 'ended' && dmCallActive) { endDMCall(false); }
+  });
+}
+
+function showIncomingCall(data, cid) {
+  const ring = document.getElementById('dmCallRing');
+  document.getElementById('dmCallRingName').textContent = data.callerName || 'Someone';
+  ring.classList.add('visible');
+
+  document.getElementById('dmCallAcceptBtn').onclick = async () => {
+    ring.classList.remove('visible');
+    try {
+      dmCallStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) { alert('Microphone access denied.'); return; }
+    dmCallActive    = true;
+    dmCallPartnerId = data.callerId;
+    await updateDoc(doc(db, 'dmCalls', cid), { status: 'accepted' });
+    showCallOverlay('Connecting…', data.callerId);
+    startDMCallVAD('self', dmCallStream);
+    listenDMCallDoc(cid);
+  };
+
+  document.getElementById('dmCallDeclineBtn').onclick = async () => {
+    ring.classList.remove('visible');
+    await updateDoc(doc(db, 'dmCalls', cid), { status: 'ended' });
+  };
+}
+
+async function endDMCall(deleteDoc_ = true) {
+  dmCallActive = false;
+  if (dmCallPc)    { dmCallPc.close(); dmCallPc = null; }
+  if (dmCallStream){ dmCallStream.getTracks().forEach(t => t.stop()); dmCallStream = null; }
+  if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
+  if (dmCallVADSelf) { clearInterval(dmCallVADSelf.id); try { dmCallVADSelf.ctx.close(); } catch(_){} dmCallVADSelf = null; }
+  if (dmCallVADThem) { clearInterval(dmCallVADThem.id); try { dmCallVADThem.ctx.close(); } catch(_){} dmCallVADThem = null; }
+  const audio = document.getElementById('dm-call-audio');
+  if (audio) audio.remove();
+  document.getElementById('dmCallOverlay').classList.remove('visible');
+  document.getElementById('dmCallRing').classList.remove('visible');
+  document.getElementById('dmCallMyAvatar').classList.remove('speaking');
+  document.getElementById('dmCallTheirAvatar').classList.remove('speaking');
+  dmCallMuted = false;
+  document.getElementById('dmCallMuteBtn').textContent = '🎤';
+
+  if (deleteDoc_ && dmCallPartnerId) {
+    const cid = dmCallId(currentUser.uid, dmCallPartnerId);
+    try { await updateDoc(doc(db, 'dmCalls', cid), { status: 'ended' }); } catch (_) {}
+  }
+  dmCallPartnerId = null;
+
+  // Re-listen for incoming calls
+  if (currentDMUid) listenDMCall(currentDMUid);
+}
+
+function startDMCallVAD(who, stream) {
+  try {
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let speaking = false;
+    const avId = who === 'self' ? 'dmCallMyAvatar' : 'dmCallTheirAvatar';
+    const id = setInterval(() => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      const isTalking = avg > 8;
+      if (isTalking !== speaking) {
+        speaking = isTalking;
+        document.getElementById(avId)?.classList.toggle('speaking', speaking);
+      }
+    }, 80);
+    if (who === 'self') dmCallVADSelf = { id, ctx };
+    else dmCallVADThem = { id, ctx };
+  } catch (_) {}
+}
+
+document.getElementById('dmCallMuteBtn').addEventListener('click', () => {
+  if (!dmCallStream) return;
+  dmCallMuted = !dmCallMuted;
+  dmCallStream.getAudioTracks().forEach(t => t.enabled = !dmCallMuted);
+  document.getElementById('dmCallMuteBtn').textContent = dmCallMuted ? '🔇' : '🎤';
+  document.getElementById('dmCallMuteBtn').classList.toggle('active', dmCallMuted);
+});
+
+document.getElementById('dmCallEndBtn').addEventListener('click', () => endDMCall(true));
 </script>
 </body>
 </html>
