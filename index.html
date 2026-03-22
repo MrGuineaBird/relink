@@ -2110,7 +2110,7 @@ document.getElementById('uploadImgBtn').addEventListener('click', () => {
 document.getElementById('imgFileInput').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
-  if (file.size > 8 * 1024 * 1024) return alert('Image too large — max 8 MB.');
+  if (file.size > 700 * 1024) return alert('Image too large — max 700 KB. (Firestore document limit)');
   const reader = new FileReader();
   reader.onload = ev => {
     pendingImageB64 = ev.target.result;
@@ -2118,7 +2118,7 @@ document.getElementById('imgFileInput').addEventListener('change', e => {
     document.getElementById('imgPreviewBar').classList.add('visible');
   };
   reader.readAsDataURL(file);
-  e.target.value = ''; // reset so same file can be re-selected
+  e.target.value = '';
 });
 
 document.getElementById('removeImgBtn').addEventListener('click', () => {
@@ -2158,7 +2158,11 @@ async function sendMessage() {
   };
   if (replyingTo) { msgData.replyTo = replyingTo; }
   cancelReply();
-  await addDoc(collection(db, 'servers', currentServer, 'channels', currentChannel, 'messages'), msgData);
+  try {
+    await addDoc(collection(db, 'servers', currentServer, 'channels', currentChannel, 'messages'), msgData);
+  } catch (e) {
+    alert('Failed to send message: ' + (e.message || e.code));
+  }
 }
 
 // ── Lightbox ───────────────────────────────────────────────────────
@@ -2399,14 +2403,19 @@ function openDM(uid, username) {
 
 async function sendDM(text, image) {
   const id = dmId(currentUser.uid, currentDMUid);
-  await addDoc(collection(db, 'dms', id, 'messages'), {
-    from: myUsername,
-    fromDisplayName: myDisplayName || myUsername,
-    fromAvatar: myAvatar || null,
-    fromUid: currentUser.uid,
-    to: currentDMName, toUid: currentDMUid,
-    text, image: image || null, ts: serverTimestamp()
-  });
+  try {
+    await addDoc(collection(db, 'dms', id, 'messages'), {
+      from: myUsername,
+      fromDisplayName: myDisplayName || myUsername,
+      fromAvatar: myAvatar || null,
+      fromUid: currentUser.uid,
+      to: currentDMName, toUid: currentDMUid,
+      text, image: image || null, ts: serverTimestamp()
+    });
+  } catch (e) {
+    alert('Failed to send message: ' + (e.message || e.code));
+    return;
+  }
   await setDoc(doc(db, 'userDMs', currentUser.uid), { [currentDMUid]: currentDMName }, { merge: true });
   await setDoc(doc(db, 'userDMs', currentDMUid), { [currentUser.uid]: myUsername }, { merge: true });
 }
