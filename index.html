@@ -1472,6 +1472,7 @@ let isMuted          = false;
 const peerConnections = {};
 let vcParticipantsUnsub = null;
 const vadIntervals = {};
+const vcParticipantData = {}; // uid → { displayName, username, avatar, ... }
 
 const ICE_SERVERS = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -1522,17 +1523,19 @@ function addVcChannelItem(name) {
   el.onclick = () => joinVoiceChannel(name);
   channelList.appendChild(el);
 
-  // Participant list under this VC item
   const partEl = document.createElement('div');
   partEl.className = 'vc-participants';
   partEl.id = 'vc-parts-' + name;
   channelList.appendChild(partEl);
 
-  // Listen for participants in this VC
+  // Listen for participants — store in vcParticipantData map for other functions to use
   onSnapshot(collection(db, 'servers', currentServer, 'vc', name, 'participants'), snap => {
     partEl.innerHTML = '';
     snap.docs.forEach(d => {
       const p = d.data();
+      // Store participant data so addShareTile / VAD can look it up
+      vcParticipantData[p.uid] = p;
+
       const row = document.createElement('div');
       row.className = 'vc-participant';
       row.id = 'vc-row-' + p.uid;
@@ -1545,6 +1548,18 @@ function addVcChannelItem(name) {
       row.appendChild(av);
       row.appendChild(nm);
       partEl.appendChild(row);
+
+      // If this participant already has a share tile, update its label now the data is available
+      if (activeTiles[p.uid]) {
+        const label = activeTiles[p.uid].querySelector('.screenshare-tile-label');
+        if (label) label.textContent = '🖥️ ' + (p.displayName || p.username);
+      }
+    });
+
+    // Remove stale entries from map
+    const activeUids = new Set(snap.docs.map(d => d.id));
+    Object.keys(vcParticipantData).forEach(uid => {
+      if (!activeUids.has(uid)) delete vcParticipantData[uid];
     });
   });
 }
@@ -1562,6 +1577,14 @@ async function joinVoiceChannel(name) {
 
   currentVcChannel = name;
   startVAD(currentUser.uid, localStream);
+
+  // Store own data immediately so tiles/labels work before Firestore snapshot fires
+  vcParticipantData[currentUser.uid] = {
+    uid: currentUser.uid,
+    username: myUsername,
+    displayName: myDisplayName || myUsername,
+    avatar: myAvatar || null
+  };
 
   // Mark ourselves as present
   await setDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid), {
@@ -1731,9 +1754,15 @@ function addShareTile(uid, stream, isSelf) {
 
   const label = document.createElement('div');
   label.className = 'screenshare-tile-label';
+  // Use participant data map first (most reliable), fall back to DOM row, then self
+  const pData = vcParticipantData[uid];
   const row = document.getElementById('vc-row-' + uid);
-  const name = row ? row.querySelector('span')?.textContent : (isSelf ? (myDisplayName || myUsername) : uid);
-  label.textContent = '🖥️ ' + name;
+  const name = pData
+    ? (pData.displayName || pData.username)
+    : row
+      ? row.querySelector('span')?.textContent
+      : (isSelf ? (myDisplayName || myUsername) : uid);
+  label.textContent = '🖥️ ' + (name || uid);
   tile.appendChild(label);
 
   // Fullscreen button
@@ -1794,6 +1823,7 @@ async function leaveVoiceChannel() {
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   document.querySelectorAll('[id^="vc-audio-"]').forEach(el => el.remove());
   Object.keys(activeTiles).forEach(uid => removeShareTile(uid));
+  Object.keys(vcParticipantData).forEach(k => delete vcParticipantData[k]);
 
   document.getElementById('vcActiveBar').classList.remove('visible');
   document.querySelectorAll('.vc-item').forEach(el => el.classList.remove('active'));
