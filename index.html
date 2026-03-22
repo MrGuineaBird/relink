@@ -774,9 +774,11 @@ async function signup() {
   if (!/^[a-zA-Z0-9_]{2,24}$/.test(u))
     return (err.textContent = 'Username: 2-24 chars, letters/numbers/_ only.');
   try {
-    // Use real email for Firebase Auth
     const cred = await createUserWithEmailAndPassword(auth, email, p);
-    try { await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid, email }); } catch (_) {}
+    sessionStorage.setItem('pendingUsername', u);
+    sessionStorage.setItem('pendingEmail', email);
+    // Write user doc — user is authenticated at this point so rules allow it
+    await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid, email });
     try { await sendEmailVerification(cred.user); } catch (_) {}
   } catch (e) {
     if (e.code === 'auth/email-already-in-use') err.textContent = 'An account with this email already exists.';
@@ -816,8 +818,26 @@ async function logout() {
 
 onAuthStateChanged(auth, async user => {
   if (user) {
+    // Always try to write the user doc if it doesn't exist yet
+    // (happens right after signup before verification)
+    const existsSnap = await getDoc(doc(db, 'users', user.uid));
+    if (!existsSnap.exists()) {
+      const pendingUsername = sessionStorage.getItem('pendingUsername');
+      const pendingEmail    = sessionStorage.getItem('pendingEmail');
+      const fallbackUsername = user.email.endsWith('@relink.local')
+        ? user.email.replace('@relink.local', '')
+        : user.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+      const username = pendingUsername || fallbackUsername;
+      try {
+        await setDoc(doc(db, 'users', user.uid), {
+          username, uid: user.uid, email: pendingEmail || user.email
+        });
+        sessionStorage.removeItem('pendingUsername');
+        sessionStorage.removeItem('pendingEmail');
+      } catch (_) {}
+    }
+
     // Check email verification
-    // Skip verification check for legacy accounts using fake @relink.local email
     if (!user.emailVerified && !user.email.endsWith('@relink.local')) {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('verifyScreen').style.display = 'flex';
