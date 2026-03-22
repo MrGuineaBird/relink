@@ -219,13 +219,18 @@
     .vc-ctrl-btn.leave { background:#7c2d2d; color:#fff }
     .vc-ctrl-btn.leave:hover { background:#993a3a }
 
-    /* Screen share */
-    .screenshare-overlay { display:none; background:#0a0d14; border-bottom:1px solid #242629; position:relative; align-items:center; justify-content:center; min-height:0 }
-    .screenshare-overlay.visible { display:flex; flex:0 0 auto; height:55% }
-    .screenshare-overlay video { width:100%; height:100%; object-fit:contain; display:block }
-    .screenshare-badge { position:absolute; top:8px; left:12px; background:rgba(0,0,0,0.6); color:#fff; font-size:12px; padding:3px 8px; border-radius:4px; pointer-events:none }
-    .screenshare-stop { position:absolute; top:8px; right:12px; background:#7c2d2d; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer }
-    .screenshare-stop:hover { background:#993a3a }
+    /* Screen share grid */
+    .screenshare-overlay { display:none; background:#0a0d14; border-bottom:1px solid #242629; min-height:0; overflow:hidden }
+    .screenshare-overlay.visible { display:flex; flex:0 0 auto; height:55%; }
+    .screenshare-grid { display:grid; width:100%; height:100%; gap:4px; padding:4px; box-sizing:border-box; grid-template-columns:1fr }
+    .screenshare-grid.two   { grid-template-columns:1fr 1fr }
+    .screenshare-grid.three { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr }
+    .screenshare-grid.four  { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr }
+    .screenshare-tile { position:relative; background:#0d1017; border-radius:6px; overflow:hidden; display:flex; align-items:center; justify-content:center }
+    .screenshare-tile video { width:100%; height:100%; object-fit:contain }
+    .screenshare-tile-label { position:absolute; bottom:6px; left:8px; background:rgba(0,0,0,0.65); color:#fff; font-size:11px; padding:2px 7px; border-radius:4px; pointer-events:none }
+    .screenshare-tile-stop { position:absolute; top:6px; right:8px; background:#7c2d2d; color:#fff; border:none; border-radius:5px; padding:3px 9px; font-size:11px; cursor:pointer }
+    .screenshare-tile-stop:hover { background:#993a3a }
 
     /* Right-click context menu */
     .ctx-menu { display:none; position:fixed; background:var(--panel); border-radius:8px; padding:6px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.5); z-index:200; border:1px solid rgba(255,255,255,0.07) }
@@ -325,9 +330,7 @@
   <div class="chat">
     <div class="chat-header" id="chatHeader"># none</div>
     <div class="screenshare-overlay" id="screenshareOverlay">
-      <video id="screenshareVideo" autoplay playsinline></video>
-      <div class="screenshare-badge" id="screenshareBadge">🖥️ Sharing</div>
-      <button class="screenshare-stop" id="screenshareStopBtn" style="display:none">Stop Sharing</button>
+      <div class="screenshare-grid" id="screenshareGrid"></div>
     </div>
     <div class="messages" id="messages"></div>
     <div class="composer">
@@ -1190,6 +1193,7 @@ async function openProfileCard(uid, e) {
   card.style.left = x + 'px';
   card.style.top  = y + 'px';
   card.classList.add('open');
+  profileCardJustOpened = true;
 }
 
 function closeProfileCard() {
@@ -1210,8 +1214,11 @@ document.getElementById('profileCardDMBtn').addEventListener('click', async () =
   openDM(uid, u.username);
 });
 
+let profileCardJustOpened = false;
+
 document.addEventListener('click', e => {
   if (!profileCard.classList.contains('open')) return;
+  if (profileCardJustOpened) { profileCardJustOpened = false; return; }
   if (!e.target.closest('#profileCard')) {
     closeProfileCard();
   }
@@ -1639,19 +1646,9 @@ function createPC(remoteUid) {
   pc.ontrack = e => {
     const track = e.track;
     if (track.kind === 'video') {
-      // Someone is screen sharing — show their stream
-      const overlay = document.getElementById('screenshareOverlay');
-      const video = document.getElementById('screenshareVideo');
-      video.srcObject = e.streams[0];
-      document.getElementById('screenshareBadge').textContent = '🖥️ ' + (remoteUid === currentUser.uid ? 'You' : 'Someone') + ' is sharing';
-      document.getElementById('screenshareStopBtn').style.display = 'none';
-      overlay.classList.add('visible');
-      track.onended = () => {
-        overlay.classList.remove('visible');
-        video.srcObject = null;
-      };
+      addShareTile(remoteUid, e.streams[0], false);
+      track.onended = () => removeShareTile(remoteUid);
     } else {
-      // Audio track
       let audio = document.getElementById('vc-audio-' + remoteUid);
       if (!audio) { audio = document.createElement('audio'); audio.id = 'vc-audio-' + remoteUid; document.body.appendChild(audio); }
       audio.autoplay = true;
@@ -1663,29 +1660,84 @@ function createPC(remoteUid) {
   return pc;
 }
 
+// ── Screen share grid helpers ──────────────────────────────────────
+const activeTiles = {}; // uid → tile element
+
+function updateGridLayout() {
+  const grid = document.getElementById('screenshareGrid');
+  const overlay = document.getElementById('screenshareOverlay');
+  const count = Object.keys(activeTiles).length;
+  if (count === 0) { overlay.classList.remove('visible'); return; }
+  overlay.classList.add('visible');
+  grid.className = 'screenshare-grid';
+  if (count === 2) grid.classList.add('two');
+  else if (count === 3) grid.classList.add('three');
+  else if (count >= 4) grid.classList.add('four');
+}
+
+function addShareTile(uid, stream, isSelf) {
+  if (activeTiles[uid]) {
+    // Update stream on existing tile
+    activeTiles[uid].querySelector('video').srcObject = stream;
+    return;
+  }
+  const grid = document.getElementById('screenshareGrid');
+  const tile = document.createElement('div');
+  tile.className = 'screenshare-tile';
+  tile.id = 'ss-tile-' + uid;
+
+  const video = document.createElement('video');
+  video.autoplay = true;
+  video.playsInline = true;
+  video.srcObject = stream;
+  tile.appendChild(video);
+
+  const label = document.createElement('div');
+  label.className = 'screenshare-tile-label';
+  // Look up display name from vc-row if available
+  const row = document.getElementById('vc-row-' + uid);
+  const name = row ? row.querySelector('span')?.textContent : (isSelf ? (myDisplayName || myUsername) : uid);
+  label.textContent = '🖥️ ' + name;
+  tile.appendChild(label);
+
+  if (isSelf) {
+    const stopBtn = document.createElement('button');
+    stopBtn.className = 'screenshare-tile-stop';
+    stopBtn.textContent = 'Stop';
+    stopBtn.onclick = stopScreenShare;
+    tile.appendChild(stopBtn);
+  }
+
+  activeTiles[uid] = tile;
+  grid.appendChild(tile);
+  updateGridLayout();
+}
+
+function removeShareTile(uid) {
+  if (!activeTiles[uid]) return;
+  activeTiles[uid].remove();
+  delete activeTiles[uid];
+  updateGridLayout();
+}
+
+// ── Screen share controls ──────────────────────────────────────────
+
 async function leaveVoiceChannel() {
   if (!currentVcChannel) return;
   await stopScreenShare();
   const name = currentVcChannel;
   currentVcChannel = null;
 
-  // Remove from participants
   try { await deleteDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid)); } catch (_) {}
 
-  // Close all peer connections
   Object.values(peerConnections).forEach(pc => pc.close());
   Object.keys(peerConnections).forEach(k => { stopVAD(k); delete peerConnections[k]; });
 
-  // Stop local VAD + mic
   stopVAD(currentUser.uid);
-
-  // Stop mic
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-
-  // Remove audio elements
   document.querySelectorAll('[id^="vc-audio-"]').forEach(el => el.remove());
+  Object.keys(activeTiles).forEach(uid => removeShareTile(uid));
 
-  // Hide bar, de-highlight
   document.getElementById('vcActiveBar').classList.remove('visible');
   document.querySelectorAll('.vc-item').forEach(el => el.classList.remove('active'));
 
@@ -1708,30 +1760,24 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
   if (!currentVcChannel) return alert('Join a voice channel first.');
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-  } catch (e) { return; } // user cancelled
+  } catch (e) { return; }
 
   isSharing = true;
-  const shareBtn = document.getElementById('vcShareBtn');
-  shareBtn.textContent = '🛑 Stop';
-  shareBtn.classList.add('active');
+  document.getElementById('vcShareBtn').textContent = '🛑 Stop';
+  document.getElementById('vcShareBtn').classList.add('active');
 
-  // Show locally
-  const overlay = document.getElementById('screenshareOverlay');
-  const video = document.getElementById('screenshareVideo');
-  video.srcObject = screenStream;
-  document.getElementById('screenshareBadge').textContent = '🖥️ You are sharing';
-  document.getElementById('screenshareStopBtn').style.display = 'block';
-  overlay.classList.add('visible');
+  // Show own tile
+  addShareTile(currentUser.uid, screenStream, true);
 
-  // Add video track to all existing peer connections
   const videoTrack = screenStream.getVideoTracks()[0];
+
+  // Push to all peers
   for (const [uid, pc] of Object.entries(peerConnections)) {
     const sender = pc.getSenders().find(s => s.track?.kind === 'video');
     if (sender) {
-      sender.replaceTrack(videoTrack);
+      await sender.replaceTrack(videoTrack);
     } else {
       pc.addTrack(videoTrack, screenStream);
-      // Renegotiate
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
@@ -1740,34 +1786,26 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
     }
   }
 
-  // Auto-stop when user clicks browser's "Stop sharing"
   videoTrack.onended = () => stopScreenShare();
 });
-
-document.getElementById('screenshareStopBtn').addEventListener('click', stopScreenShare);
 
 async function stopScreenShare() {
   if (!isSharing) return;
   isSharing = false;
   if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
 
-  // Remove video from peers
+  removeShareTile(currentUser.uid);
+
   for (const pc of Object.values(peerConnections)) {
     const sender = pc.getSenders().find(s => s.track?.kind === 'video');
     if (sender) pc.removeTrack(sender);
   }
 
-  document.getElementById('screenshareOverlay').classList.remove('visible');
-  document.getElementById('screenshareVideo').srcObject = null;
-  const shareBtn = document.getElementById('vcShareBtn');
-  shareBtn.textContent = '🖥️ Share';
-  shareBtn.classList.remove('active');
-  document.getElementById('screenshareStopBtn').style.display = 'none';
+  document.getElementById('vcShareBtn').textContent = '🖥️ Share';
+  document.getElementById('vcShareBtn').classList.remove('active');
 }
 
 document.getElementById('vcLeaveBtn').addEventListener('click', leaveVoiceChannel);
-
-// Leave VC when closing tab
 window.addEventListener('beforeunload', () => { leaveVoiceChannel(); clearPresence(); });
 </script>
 </body>
