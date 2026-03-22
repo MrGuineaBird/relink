@@ -3153,65 +3153,82 @@ function showCallOverlay(status, partnerId) {
 
 function listenDMCallDoc(cid, isCaller) {
   if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
+  let lastCallerSdp    = null;
+  let lastCalleeSdp    = null;
+  let lastReofferSdp   = null;
+  let lastReofferAns   = null;
+
   unsubDmCall = onSnapshot(doc(db, 'dmCalls', cid), async snap => {
     if (!snap.exists()) { endDMCall(false); return; }
     const data = snap.data();
-
     if (data.status === 'ended') { endDMCall(false); return; }
 
-    // Store partner's camera stream ID so ontrack can identify it
-    if (dmCallPc && data.camStreamId) {
+    // Store partner's cam stream ID for ontrack routing
+    if (dmCallPc && data.camStreamId && data.reofferFrom !== currentUser.uid) {
       dmCallPc._theirCamStreamId = data.camStreamId;
     }
 
+    // ── Initial handshake ────────────────────────────────────────
     if (isCaller) {
       if (data.status === 'accepted' && !dmCallRtcReady) {
         dmCallRtcReady = true;
         document.getElementById('dmCallStatus').textContent = 'Connecting…';
         await initDMCallRTC(cid, true);
+        return;
       }
-      // Got callee's answer (initial or renegotiation)
-      if (data.calleeSdp && dmCallPc) {
-        if (!dmCallPc.remoteDescription || dmCallPc.signalingState === 'have-local-offer') {
-          try { await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.calleeSdp }); } catch(_) {}
+      // Got callee's initial answer
+      if (data.calleeSdp && data.calleeSdp !== lastCalleeSdp && dmCallPc) {
+        lastCalleeSdp = data.calleeSdp;
+        if (dmCallPc.signalingState === 'have-local-offer') {
+          try { await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.calleeSdp }); } catch(e) {}
         }
       }
       if (data.iceCallee && dmCallPc?.remoteDescription) {
-        const newCandidates = data.iceCallee.slice(dmCallIceCalleeCount);
-        for (const c of newCandidates) {
-          try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
-        }
+        const nc = data.iceCallee.slice(dmCallIceCalleeCount);
+        for (const c of nc) { try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch(_){} }
         dmCallIceCalleeCount = data.iceCallee.length;
       }
     } else {
-      // Got caller's offer (initial or renegotiation for camera/share)
-      if (data.callerSdp && dmCallPc) {
+      // Got caller's initial offer
+      if (data.callerSdp && data.callerSdp !== lastCallerSdp) {
+        lastCallerSdp = data.callerSdp;
         if (!dmCallRtcReady) {
           dmCallRtcReady = true;
           await initDMCallRTC(cid, false);
         }
-        try {
-          await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
-          const answer = await dmCallPc.createAnswer();
-          await dmCallPc.setLocalDescription(answer);
-          await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
-        } catch(_) {}
-      } else if (data.callerSdp && !dmCallRtcReady) {
-        dmCallRtcReady = true;
-        await initDMCallRTC(cid, false);
-        try {
-          await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
-          const answer = await dmCallPc.createAnswer();
-          await dmCallPc.setLocalDescription(answer);
-          await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
-        } catch(_) {}
+        if (dmCallPc) {
+          try {
+            await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
+            const answer = await dmCallPc.createAnswer();
+            await dmCallPc.setLocalDescription(answer);
+            lastCalleeSdp = answer.sdp;
+            await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
+          } catch(e) {}
+        }
       }
       if (data.iceCaller && dmCallPc?.remoteDescription) {
-        const newCandidates = data.iceCaller.slice(dmCallIceCallerCount);
-        for (const c of newCandidates) {
-          try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
-        }
+        const nc = data.iceCaller.slice(dmCallIceCallerCount);
+        for (const c of nc) { try { await dmCallPc.addIceCandidate(new RTCIceCandidate(c)); } catch(_){} }
         dmCallIceCallerCount = data.iceCaller.length;
+      }
+    }
+
+    // ── Renegotiation (camera/screenshare) — works for both sides ─
+    if (data.reofferSdp && data.reofferSdp !== lastReofferSdp && data.reofferFrom !== currentUser.uid && dmCallPc) {
+      lastReofferSdp = data.reofferSdp;
+      try {
+        await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.reofferSdp });
+        const answer = await dmCallPc.createAnswer();
+        await dmCallPc.setLocalDescription(answer);
+        lastReofferAns = answer.sdp;
+        await updateDoc(doc(db, 'dmCalls', cid), { reofferAnswerSdp: answer.sdp });
+      } catch(e) { console.warn('reoffer error:', e); }
+    }
+    // Process reoffer answer if WE sent the reoffer
+    if (data.reofferAnswerSdp && data.reofferAnswerSdp !== lastReofferAns && data.reofferFrom === currentUser.uid && dmCallPc) {
+      lastReofferAns = data.reofferAnswerSdp;
+      if (dmCallPc.signalingState === 'have-local-offer') {
+        try { await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.reofferAnswerSdp }); } catch(e) {}
       }
     }
   });
@@ -3459,18 +3476,21 @@ document.getElementById('dmCallCamBtn').addEventListener('click', async () => {
   dmIsCameraOn = true;
   document.getElementById('dmCallCamBtn').textContent = '📷 Stop';
   document.getElementById('dmCallCamBtn').classList.add('active');
-
   addDmCamTile(currentUser.uid, dmCameraStream);
 
   const vTrack = dmCameraStream.getVideoTracks()[0];
-  // Store our cam stream ID on the PC so remote ontrack can identify it
-  dmCallPc._myCamStreamId = dmCameraStream.id;
   dmCallPc.addTrack(vTrack, dmCameraStream);
 
   const cid = dmCallId(currentUser.uid, dmCallPartnerId);
   const offer = await dmCallPc.createOffer();
   await dmCallPc.setLocalDescription(offer);
-  await updateDoc(doc(db, 'dmCalls', cid), { callerSdp: offer.sdp, calleeSdp: null, camStreamId: dmCameraStream.id });
+  // Use a dedicated renegotiation field — both sides can write here
+  await updateDoc(doc(db, 'dmCalls', cid), {
+    reofferSdp: offer.sdp,
+    reofferFrom: currentUser.uid,
+    camStreamId: dmCameraStream.id,
+    reofferAnswerSdp: null
+  });
 
   vTrack.onended = () => stopDMCamera();
 });
@@ -3513,9 +3533,12 @@ document.getElementById('dmCallShareBtn').addEventListener('click', async () => 
   if (aTrack) dmCallPc.addTrack(aTrack, dmScreenStream);
   const offer = await dmCallPc.createOffer();
   await dmCallPc.setLocalDescription(offer);
-  // reuse the signaling channel via a renegotiation signal
   const cid = dmCallId(currentUser.uid, dmCallPartnerId);
-  await updateDoc(doc(db, 'dmCalls', cid), { callerSdp: offer.sdp, calleeSdp: null });
+  await updateDoc(doc(db, 'dmCalls', cid), {
+    reofferSdp: offer.sdp,
+    reofferFrom: currentUser.uid,
+    reofferAnswerSdp: null
+  });
   vTrack.onended = () => stopDMShare();
   if (aTrack) aTrack.onended = () => stopDMShare();
 });
