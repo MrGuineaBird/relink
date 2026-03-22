@@ -400,6 +400,10 @@
     <h2>Create an account</h2>
     <p class="login-sub"></p>
     <div class="login-field">
+      <label>Email <span>*</span></label>
+      <input id="signupEmailInput" type="email" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="login-field">
       <label>Username <span>*</span></label>
       <input id="signupUsernameInput" type="text" placeholder="letters, numbers, _" autocomplete="off">
     </div>
@@ -759,20 +763,25 @@ document.getElementById('switchToLogin').addEventListener('click', () => {
 });
 
 async function signup() {
+  const email = document.getElementById('signupEmailInput').value.trim();
   const u = document.getElementById('signupUsernameInput').value.trim();
   const p = document.getElementById('signupPasswordInput').value;
   const err = document.getElementById('signupError');
   err.textContent = '';
-  if (!u || !p) return (err.textContent = 'Please fill in all fields.');
+  if (!email || !u || !p) return (err.textContent = 'Please fill in all fields.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return (err.textContent = 'Please enter a valid email address.');
   if (!/^[a-zA-Z0-9_]{2,24}$/.test(u))
     return (err.textContent = 'Username: 2-24 chars, letters/numbers/_ only.');
   try {
-    const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(u), p);
-    try { await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid }); } catch (_) {}
-    // Send verification email
+    // Use real email for Firebase Auth
+    const cred = await createUserWithEmailAndPassword(auth, email, p);
+    try { await setDoc(doc(db, 'users', cred.user.uid), { username: u, uid: cred.user.uid, email }); } catch (_) {}
     try { await sendEmailVerification(cred.user); } catch (_) {}
   } catch (e) {
-    err.textContent = e.code === 'auth/email-already-in-use' ? 'Username already taken.' : e.message;
+    if (e.code === 'auth/email-already-in-use') err.textContent = 'An account with this email already exists.';
+    else if (e.code === 'auth/weak-password') err.textContent = 'Password must be at least 6 characters.';
+    else err.textContent = e.message;
   }
 }
 
@@ -783,7 +792,15 @@ async function login() {
   err.textContent = '';
   if (!u || !p) return (err.textContent = 'Please fill in all fields.');
   try {
-    await signInWithEmailAndPassword(auth, usernameToEmail(u), p);
+    // Try as email first, then fall back to username lookup
+    let emailToUse = u;
+    if (!u.includes('@')) {
+      // Username login — look up their real email from Firestore
+      const snap = await getDocs(query(collection(db, 'users'), where('username', '==', u)));
+      if (snap.empty) return (err.textContent = 'Invalid username or password.');
+      emailToUse = snap.docs[0].data().email || usernameToEmail(u);
+    }
+    await signInWithEmailAndPassword(auth, emailToUse, p);
   } catch (e) {
     err.textContent = 'Invalid username or password.';
   }
@@ -801,7 +818,7 @@ onAuthStateChanged(auth, async user => {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('verifyScreen').style.display = 'flex';
       document.getElementById('app').style.display = 'none';
-      document.getElementById('verifyEmailAddr').textContent = user.email.replace('@relink.local', '');
+      document.getElementById('verifyEmailAddr').textContent = user.email;
       return;
     }
 
