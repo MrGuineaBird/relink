@@ -219,6 +219,14 @@
     .vc-ctrl-btn.leave { background:#7c2d2d; color:#fff }
     .vc-ctrl-btn.leave:hover { background:#993a3a }
 
+    /* Screen share */
+    .screenshare-overlay { display:none; background:#0a0d14; border-bottom:1px solid #242629; position:relative; align-items:center; justify-content:center; min-height:0 }
+    .screenshare-overlay.visible { display:flex; flex:0 0 auto; height:55% }
+    .screenshare-overlay video { width:100%; height:100%; object-fit:contain; display:block }
+    .screenshare-badge { position:absolute; top:8px; left:12px; background:rgba(0,0,0,0.6); color:#fff; font-size:12px; padding:3px 8px; border-radius:4px; pointer-events:none }
+    .screenshare-stop { position:absolute; top:8px; right:12px; background:#7c2d2d; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer }
+    .screenshare-stop:hover { background:#993a3a }
+
     /* Right-click context menu */
     .ctx-menu { display:none; position:fixed; background:var(--panel); border-radius:8px; padding:6px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.5); z-index:200; border:1px solid rgba(255,255,255,0.07) }
     .ctx-menu.open { display:block }
@@ -304,6 +312,7 @@
       </div>
       <div class="vc-controls">
         <button class="vc-ctrl-btn" id="vcMuteBtn" title="Mute">🎤 Mute</button>
+        <button class="vc-ctrl-btn" id="vcShareBtn" title="Share Screen">🖥️ Share</button>
         <button class="vc-ctrl-btn leave" id="vcLeaveBtn">📴 Leave</button>
       </div>
     </div>
@@ -315,6 +324,11 @@
 
   <div class="chat">
     <div class="chat-header" id="chatHeader"># none</div>
+    <div class="screenshare-overlay" id="screenshareOverlay">
+      <video id="screenshareVideo" autoplay playsinline></video>
+      <div class="screenshare-badge" id="screenshareBadge">🖥️ Sharing</div>
+      <button class="screenshare-stop" id="screenshareStopBtn" style="display:none">Stop Sharing</button>
+    </div>
     <div class="messages" id="messages"></div>
     <div class="composer">
       <div class="img-preview-bar" id="imgPreviewBar">
@@ -962,8 +976,9 @@ async function selectServer(serverId) {
   channelList.innerHTML = '';
   messagesBox.innerHTML = '';
   onlineList.innerHTML  = '';
-  document.getElementById('addChannelBtn').style.display = 'inline-block';
-  document.getElementById('addVcBtn').style.display = 'inline-block';
+  const isOwner = serverData.ownerUid === currentUser.uid;
+  document.getElementById('addChannelBtn').style.display = isOwner ? 'inline-block' : 'none';
+  document.getElementById('addVcBtn').style.display = isOwner ? 'inline-block' : 'none';
 
   const chSnap = await getDocs(query(collection(db, 'servers', serverId, 'channels'), orderBy('createdAt')));
 
@@ -1436,14 +1451,53 @@ function appendDM(m) {
 
 let currentVcChannel = null;
 let localStream      = null;
+let screenStream     = null;
+let isSharing        = false;
 let isMuted          = false;
-const peerConnections = {}; // uid → RTCPeerConnection
+const peerConnections = {};
 let vcParticipantsUnsub = null;
+const vadIntervals = {};
 
 const ICE_SERVERS = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' }
 ]};
+
+// Voice Activity Detection — highlights a participant row green while speaking
+function startVAD(uid, stream) {
+  try {
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let speaking = false;
+
+    const id = setInterval(() => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      const isTalking = avg > 8; // threshold — tweak if needed
+      if (isTalking !== speaking) {
+        speaking = isTalking;
+        const row = document.getElementById('vc-row-' + uid);
+        if (row) row.classList.toggle('speaking', speaking);
+      }
+    }, 80);
+
+    vadIntervals[uid] = { id, ctx };
+  } catch (_) {}
+}
+
+function stopVAD(uid) {
+  if (vadIntervals[uid]) {
+    clearInterval(vadIntervals[uid].id);
+    try { vadIntervals[uid].ctx.close(); } catch (_) {}
+    delete vadIntervals[uid];
+  }
+  const row = document.getElementById('vc-row-' + uid);
+  if (row) row.classList.remove('speaking');
+}
 
 function addVcChannelItem(name) {
   const el = document.createElement('div');
@@ -1466,6 +1520,7 @@ function addVcChannelItem(name) {
       const p = d.data();
       const row = document.createElement('div');
       row.className = 'vc-participant';
+      row.id = 'vc-row-' + p.uid;
       const av = document.createElement('div');
       av.className = 'vc-participant-avatar';
       if (p.avatar) av.innerHTML = `<img src="${p.avatar}">`;
@@ -1491,6 +1546,7 @@ async function joinVoiceChannel(name) {
   }
 
   currentVcChannel = name;
+  startVAD(currentUser.uid, localStream);
 
   // Mark ourselves as present
   await setDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid), {
@@ -1581,11 +1637,27 @@ function createPC(remoteUid) {
   };
 
   pc.ontrack = e => {
-    const audio = document.getElementById('vc-audio-' + remoteUid) || document.createElement('audio');
-    audio.id = 'vc-audio-' + remoteUid;
-    audio.autoplay = true;
-    audio.srcObject = e.streams[0];
-    if (!document.getElementById(audio.id)) document.body.appendChild(audio);
+    const track = e.track;
+    if (track.kind === 'video') {
+      // Someone is screen sharing — show their stream
+      const overlay = document.getElementById('screenshareOverlay');
+      const video = document.getElementById('screenshareVideo');
+      video.srcObject = e.streams[0];
+      document.getElementById('screenshareBadge').textContent = '🖥️ ' + (remoteUid === currentUser.uid ? 'You' : 'Someone') + ' is sharing';
+      document.getElementById('screenshareStopBtn').style.display = 'none';
+      overlay.classList.add('visible');
+      track.onended = () => {
+        overlay.classList.remove('visible');
+        video.srcObject = null;
+      };
+    } else {
+      // Audio track
+      let audio = document.getElementById('vc-audio-' + remoteUid);
+      if (!audio) { audio = document.createElement('audio'); audio.id = 'vc-audio-' + remoteUid; document.body.appendChild(audio); }
+      audio.autoplay = true;
+      audio.srcObject = e.streams[0];
+      startVAD(remoteUid, e.streams[0]);
+    }
   };
 
   return pc;
@@ -1593,6 +1665,7 @@ function createPC(remoteUid) {
 
 async function leaveVoiceChannel() {
   if (!currentVcChannel) return;
+  await stopScreenShare();
   const name = currentVcChannel;
   currentVcChannel = null;
 
@@ -1601,7 +1674,10 @@ async function leaveVoiceChannel() {
 
   // Close all peer connections
   Object.values(peerConnections).forEach(pc => pc.close());
-  Object.keys(peerConnections).forEach(k => delete peerConnections[k]);
+  Object.keys(peerConnections).forEach(k => { stopVAD(k); delete peerConnections[k]; });
+
+  // Stop local VAD + mic
+  stopVAD(currentUser.uid);
 
   // Stop mic
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
@@ -1626,6 +1702,68 @@ document.getElementById('vcMuteBtn').addEventListener('click', () => {
   btn.textContent = isMuted ? '🔇 Unmute' : '🎤 Mute';
   btn.classList.toggle('active', isMuted);
 });
+
+document.getElementById('vcShareBtn').addEventListener('click', async () => {
+  if (isSharing) { stopScreenShare(); return; }
+  if (!currentVcChannel) return alert('Join a voice channel first.');
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+  } catch (e) { return; } // user cancelled
+
+  isSharing = true;
+  const shareBtn = document.getElementById('vcShareBtn');
+  shareBtn.textContent = '🛑 Stop';
+  shareBtn.classList.add('active');
+
+  // Show locally
+  const overlay = document.getElementById('screenshareOverlay');
+  const video = document.getElementById('screenshareVideo');
+  video.srcObject = screenStream;
+  document.getElementById('screenshareBadge').textContent = '🖥️ You are sharing';
+  document.getElementById('screenshareStopBtn').style.display = 'block';
+  overlay.classList.add('visible');
+
+  // Add video track to all existing peer connections
+  const videoTrack = screenStream.getVideoTracks()[0];
+  for (const [uid, pc] of Object.entries(peerConnections)) {
+    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) {
+      sender.replaceTrack(videoTrack);
+    } else {
+      pc.addTrack(videoTrack, screenStream);
+      // Renegotiate
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
+        type: 'offer', from: currentUser.uid, sdp: offer.sdp
+      });
+    }
+  }
+
+  // Auto-stop when user clicks browser's "Stop sharing"
+  videoTrack.onended = () => stopScreenShare();
+});
+
+document.getElementById('screenshareStopBtn').addEventListener('click', stopScreenShare);
+
+async function stopScreenShare() {
+  if (!isSharing) return;
+  isSharing = false;
+  if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+
+  // Remove video from peers
+  for (const pc of Object.values(peerConnections)) {
+    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) pc.removeTrack(sender);
+  }
+
+  document.getElementById('screenshareOverlay').classList.remove('visible');
+  document.getElementById('screenshareVideo').srcObject = null;
+  const shareBtn = document.getElementById('vcShareBtn');
+  shareBtn.textContent = '🖥️ Share';
+  shareBtn.classList.remove('active');
+  document.getElementById('screenshareStopBtn').style.display = 'none';
+}
 
 document.getElementById('vcLeaveBtn').addEventListener('click', leaveVoiceChannel);
 
