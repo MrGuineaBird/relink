@@ -1282,7 +1282,7 @@ function appendMessage(m, msgId) {
   av.style.cursor = 'pointer';
   if (m.avatar) { av.innerHTML = `<img src="${m.avatar}" alt="">`; }
   else { av.textContent = (m.displayName || m.username || '?')[0].toUpperCase(); }
-  av.addEventListener('mousedown', e => { e.stopPropagation(); openProfileCard(m.uid, e); });
+  av.addEventListener('click', e => { e.stopPropagation(); openProfileCard(m.uid, e); });
 
   const body = document.createElement('div');
   body.className = 'msg-body';
@@ -1293,7 +1293,7 @@ function appendMessage(m, msgId) {
   name.className = 'msg-name';
   name.style.cursor = 'pointer';
   name.textContent = m.displayName || m.username;
-  name.addEventListener('mousedown', e => { e.stopPropagation(); openProfileCard(m.uid, e); });
+  name.addEventListener('click', e => { e.stopPropagation(); openProfileCard(m.uid, e); });
   const time = document.createElement('span');
   time.className = 'msg-time';
   time.textContent = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
@@ -1625,7 +1625,6 @@ async function openProfileCard(uid, e) {
   card.style.left = x + 'px';
   card.style.top  = y + 'px';
   card.classList.add('open');
-  profileCardJustOpened = true;
 }
 
 function closeProfileCard() {
@@ -1646,12 +1645,8 @@ document.getElementById('profileCardDMBtn').addEventListener('click', async () =
   openDM(uid, u.username);
 });
 
-let profileCardJustOpened = false;
-
 document.addEventListener('click', e => {
-  if (!profileCard.classList.contains('open')) return;
-  if (profileCardJustOpened) { profileCardJustOpened = false; return; }
-  if (!e.target.closest('#profileCard')) {
+  if (profileCard.classList.contains('open') && !e.target.closest('#profileCard')) {
     closeProfileCard();
   }
 });
