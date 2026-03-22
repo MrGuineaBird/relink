@@ -2951,6 +2951,8 @@ async function stopDMShare() {
   }
   document.getElementById('dmCallShareBtn').classList.remove('active');
 }
+
+document.getElementById('dmCallMuteBtn').addEventListener('click', () => {
   if (!dmCallStream) return;
   dmCallMuted = !dmCallMuted;
   dmCallStream.getAudioTracks().forEach(t => t.enabled = !dmCallMuted);
