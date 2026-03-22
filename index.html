@@ -221,22 +221,29 @@
     .notif-badge { position:absolute; bottom:-3px; right:-3px; min-width:16px; height:16px; background:#ed4245; border-radius:8px; border:2px solid var(--muted); font-size:10px; font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center; padding:0 3px; pointer-events:none; box-sizing:border-box; line-height:1 }
     .notif-badge.hidden { display:none }
 
-    /* DM Call overlay */
-    .dm-call-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:600; flex-direction:column; align-items:center; justify-content:center; gap:24px }
-    .dm-call-overlay.visible { display:flex }
-    .dm-call-avatars { display:flex; gap:24px; align-items:center }
-    .dm-call-avatar { display:flex; flex-direction:column; align-items:center; gap:8px }
-    .dm-call-avatar-img { width:80px; height:80px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:700; overflow:hidden; border:3px solid transparent; transition:border-color .2s }
+    /* DM Call panel — inline above messages */
+    .dm-call-panel { display:none; flex-direction:column; background:#0d1117; border-bottom:1px solid #242629; flex-shrink:0 }
+    .dm-call-panel.visible { display:flex }
+    .dm-call-top { display:flex; flex-direction:column; align-items:center; padding:20px 16px 12px; gap:12px }
+    .dm-call-avatars { display:flex; gap:16px; align-items:center }
+    .dm-call-avatar { display:flex; flex-direction:column; align-items:center; gap:6px }
+    .dm-call-avatar-img { width:64px; height:64px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; overflow:hidden; border:3px solid transparent; transition:border-color .2s }
     .dm-call-avatar-img img { width:100%; height:100%; object-fit:cover }
     .dm-call-avatar-img.speaking { border-color:#3ba55c }
-    .dm-call-avatar-name { font-size:13px; color:rgba(255,255,255,0.8); font-weight:600 }
-    .dm-call-status { font-size:14px; color:rgba(255,255,255,0.5); font-style:italic }
-    .dm-call-controls { display:flex; gap:12px; background:rgba(255,255,255,0.08); backdrop-filter:blur(10px); padding:12px 20px; border-radius:40px; border:1px solid rgba(255,255,255,0.1) }
-    .dm-call-btn { width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:18px; transition:background .2s, transform .1s; background:rgba(255,255,255,0.12); color:#fff }
-    .dm-call-btn:hover { background:rgba(255,255,255,0.2); transform:scale(1.08) }
-    .dm-call-btn.active { background:rgba(255,255,255,0.3) }
-    .dm-call-btn.end { background:#ed4245; width:52px; height:52px; font-size:20px }
+    .dm-call-avatar-name { font-size:12px; color:rgba(255,255,255,0.7); font-weight:600 }
+    .dm-call-status { font-size:12px; color:rgba(255,255,255,0.4); font-style:italic }
+    .dm-call-controls { display:flex; gap:8px; background:rgba(255,255,255,0.06); padding:8px 14px; border-radius:32px; border:1px solid rgba(255,255,255,0.08) }
+    .dm-call-btn { width:36px; height:36px; border-radius:50%; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; transition:background .2s; background:rgba(255,255,255,0.1); color:#fff }
+    .dm-call-btn:hover { background:rgba(255,255,255,0.2) }
+    .dm-call-btn.active { background:rgba(255,255,255,0.25) }
+    .dm-call-btn.end { background:#ed4245; width:40px; height:40px; font-size:17px }
     .dm-call-btn.end:hover { background:#c0373a }
+    /* DM screenshare grid */
+    .dm-call-share-grid { display:none; width:100%; background:#0a0d14; border-top:1px solid #1a1f2e }
+    .dm-call-share-grid.visible { display:grid; min-height:220px; max-height:45vh }
+    .dm-call-share-grid.one  { grid-template-columns:1fr }
+    .dm-call-share-grid.two  { grid-template-columns:1fr 1fr }
+    .dm-call-share-grid.three { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr }
 
     /* Incoming call ring */
     .dm-call-ring { display:none; position:fixed; bottom:24px; right:24px; background:#1e2736; border-radius:16px; padding:16px 20px; z-index:700; box-shadow:0 8px 32px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.1); min-width:280px }
@@ -433,6 +440,29 @@
 
   <div class="chat">
     <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between"><span id="chatHeaderText"># none</span><button id="dmCallBtn" style="display:none;background:none;border:none;color:#3ba55c;cursor:pointer;font-size:18px;padding:2px 6px;border-radius:6px" title="Start voice call">📞</button></div>
+    <!-- DM Call panel — inline above messages -->
+    <div class="dm-call-panel" id="dmCallOverlay">
+      <div class="dm-call-share-grid" id="dmCallShareGrid"></div>
+      <div class="dm-call-top">
+        <div class="dm-call-avatars">
+          <div class="dm-call-avatar">
+            <div class="dm-call-avatar-img" id="dmCallMyAvatar"></div>
+            <div class="dm-call-avatar-name" id="dmCallMyName"></div>
+          </div>
+          <div style="font-size:20px;color:rgba(255,255,255,0.2);margin:0 4px">⟷</div>
+          <div class="dm-call-avatar">
+            <div class="dm-call-avatar-img" id="dmCallTheirAvatar"></div>
+            <div class="dm-call-avatar-name" id="dmCallTheirName"></div>
+          </div>
+        </div>
+        <div class="dm-call-status" id="dmCallStatus">Calling…</div>
+        <div class="dm-call-controls">
+          <button class="dm-call-btn" id="dmCallMuteBtn" title="Mute">🎤</button>
+          <button class="dm-call-btn" id="dmCallShareBtn" title="Share Screen" style="display:none">🖥️</button>
+          <button class="dm-call-btn end" id="dmCallEndBtn" title="End call">📵</button>
+        </div>
+      </div>
+    </div>
     <div class="screenshare-overlay" id="screenshareOverlay">
       <div class="screenshare-grid" id="screenshareGrid"></div>
     </div>
@@ -490,25 +520,6 @@
 </div>
 
 <!-- DM Call Overlay -->
-<div class="dm-call-overlay" id="dmCallOverlay">
-  <div class="dm-call-avatars">
-    <div class="dm-call-avatar">
-      <div class="dm-call-avatar-img" id="dmCallMyAvatar"></div>
-      <div class="dm-call-avatar-name" id="dmCallMyName"></div>
-    </div>
-    <div style="font-size:24px;color:rgba(255,255,255,0.3)">⟷</div>
-    <div class="dm-call-avatar">
-      <div class="dm-call-avatar-img" id="dmCallTheirAvatar"></div>
-      <div class="dm-call-avatar-name" id="dmCallTheirName"></div>
-    </div>
-  </div>
-  <div class="dm-call-status" id="dmCallStatus">Calling…</div>
-  <div class="dm-call-controls">
-    <button class="dm-call-btn" id="dmCallMuteBtn" title="Mute">🎤</button>
-    <button class="dm-call-btn end" id="dmCallEndBtn" title="End call">📵</button>
-  </div>
-</div>
-
 <!-- Incoming Call Ring -->
 <div class="dm-call-ring" id="dmCallRing">
   <div class="dm-call-ring-name" id="dmCallRingName">Someone</div>
@@ -2618,12 +2629,15 @@ let dmCallMuted       = false;
 let dmCallActive      = false;
 let dmCallPartnerId   = null;
 let unsubDmCall       = null;
-let unsubDmCallIncoming = null; // separate listener for incoming calls
+let unsubDmCallIncoming = null;
 let dmCallVADSelf     = null;
 let dmCallVADThem     = null;
-let dmCallRtcReady    = false; // guard against double-init
-let dmCallIceCallerCount = 0;  // track how many caller ICE we've processed
-let dmCallIceCalleeCount = 0;  // track how many callee ICE we've processed
+let dmCallRtcReady    = false;
+let dmCallIceCallerCount = 0;
+let dmCallIceCalleeCount = 0;
+let dmScreenStream    = null;
+let dmIsSharing       = false;
+const dmShareTiles    = {};
 
 function dmCallId(uid1, uid2) { return [uid1, uid2].sort().join('_'); }
 
@@ -2736,17 +2750,24 @@ async function initDMCallRTC(cid, isCaller) {
   };
 
   dmCallPc.ontrack = e => {
-    let audio = document.getElementById('dm-call-audio');
-    if (!audio) { audio = document.createElement('audio'); audio.id = 'dm-call-audio'; document.body.appendChild(audio); }
-    audio.autoplay = true;
-    audio.srcObject = e.streams[0];
-    startDMCallVAD('them', e.streams[0]);
-    document.getElementById('dmCallStatus').textContent = 'Connected';
+    if (e.track.kind === 'video') {
+      addDmShareTile(dmCallPartnerId, e.streams[0]);
+      e.track.onended = () => removeDmShareTile(dmCallPartnerId);
+    } else {
+      let audio = document.getElementById('dm-call-audio');
+      if (!audio) { audio = document.createElement('audio'); audio.id = 'dm-call-audio'; document.body.appendChild(audio); }
+      audio.autoplay = true;
+      audio.srcObject = e.streams[0];
+      startDMCallVAD('them', e.streams[0]);
+      document.getElementById('dmCallStatus').textContent = 'Connected';
+      document.getElementById('dmCallShareBtn').style.display = 'flex';
+    }
   };
 
   dmCallPc.onconnectionstatechange = () => {
     if (dmCallPc?.connectionState === 'connected') {
       document.getElementById('dmCallStatus').textContent = 'Connected';
+      document.getElementById('dmCallShareBtn').style.display = 'flex';
     }
   };
 
@@ -2803,17 +2824,21 @@ async function endDMCall(writeEnd = true) {
   dmCallRtcReady = false;
   dmCallIceCallerCount = 0;
   dmCallIceCalleeCount = 0;
+  await stopDMShare();
   if (dmCallPc)    { dmCallPc.close(); dmCallPc = null; }
   if (dmCallStream){ dmCallStream.getTracks().forEach(t => t.stop()); dmCallStream = null; }
   if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
   if (dmCallVADSelf) { clearInterval(dmCallVADSelf.id); try { dmCallVADSelf.ctx.close(); } catch(_){} dmCallVADSelf = null; }
   if (dmCallVADThem) { clearInterval(dmCallVADThem.id); try { dmCallVADThem.ctx.close(); } catch(_){} dmCallVADThem = null; }
+  Object.keys(dmShareTiles).forEach(uid => removeDmShareTile(uid));
   const audio = document.getElementById('dm-call-audio');
   if (audio) audio.remove();
   document.getElementById('dmCallOverlay').classList.remove('visible');
   document.getElementById('dmCallRing').classList.remove('visible');
   document.getElementById('dmCallMyAvatar').classList.remove('speaking');
   document.getElementById('dmCallTheirAvatar').classList.remove('speaking');
+  document.getElementById('dmCallShareBtn').style.display = 'none';
+  document.getElementById('dmCallShareBtn').classList.remove('active');
   dmCallMuted = false;
   document.getElementById('dmCallMuteBtn').textContent = '🎤';
   document.getElementById('dmCallMuteBtn').classList.remove('active');
@@ -2850,7 +2875,82 @@ function startDMCallVAD(who, stream) {
   } catch (_) {}
 }
 
-document.getElementById('dmCallMuteBtn').addEventListener('click', () => {
+// ── DM Screen share ────────────────────────────────────────────────
+function addDmShareTile(uid, stream) {
+  const grid = document.getElementById('dmCallShareGrid');
+  if (dmShareTiles[uid]) { dmShareTiles[uid].querySelector('video').srcObject = stream; return; }
+  const tile = document.createElement('div');
+  tile.style.cssText = 'position:relative;background:#0a0d14;overflow:hidden;display:flex;align-items:center;justify-content:center';
+  const video = document.createElement('video');
+  video.autoplay = true; video.playsInline = true;
+  video.muted = (uid === currentUser.uid);
+  video.srcObject = stream;
+  video.style.cssText = 'width:100%;height:100%;object-fit:contain';
+  video.ondblclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else tile.requestFullscreen().catch(()=>{}); };
+  tile.appendChild(video);
+  if (uid === currentUser.uid) {
+    const stopBtn = document.createElement('button');
+    stopBtn.style.cssText = 'position:absolute;top:6px;right:8px;background:#7c2d2d;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:11px;cursor:pointer';
+    stopBtn.textContent = 'Stop';
+    stopBtn.onclick = stopDMShare;
+    tile.appendChild(stopBtn);
+  }
+  dmShareTiles[uid] = tile;
+  grid.appendChild(tile);
+  updateDmShareGrid();
+}
+
+function removeDmShareTile(uid) {
+  if (!dmShareTiles[uid]) return;
+  dmShareTiles[uid].remove();
+  delete dmShareTiles[uid];
+  updateDmShareGrid();
+}
+
+function updateDmShareGrid() {
+  const grid = document.getElementById('dmCallShareGrid');
+  const count = Object.keys(dmShareTiles).length;
+  if (count === 0) { grid.classList.remove('visible','one','two','three'); return; }
+  grid.className = 'dm-call-share-grid visible';
+  if (count === 1) grid.classList.add('one');
+  else if (count === 2) grid.classList.add('two');
+  else grid.classList.add('three');
+}
+
+document.getElementById('dmCallShareBtn').addEventListener('click', async () => {
+  if (dmIsSharing) { stopDMShare(); return; }
+  if (!dmCallPc) return;
+  try {
+    dmScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { echoCancellation: false, noiseSuppression: false } });
+  } catch (e) { return; }
+  dmIsSharing = true;
+  document.getElementById('dmCallShareBtn').classList.add('active');
+  addDmShareTile(currentUser.uid, dmScreenStream);
+  const vTrack = dmScreenStream.getVideoTracks()[0];
+  const aTrack = dmScreenStream.getAudioTracks()[0] || null;
+  const vSender = dmCallPc.getSenders().find(s => s.track?.kind === 'video');
+  if (vSender) { await vSender.replaceTrack(vTrack); }
+  else { dmCallPc.addTrack(vTrack, dmScreenStream); }
+  if (aTrack) dmCallPc.addTrack(aTrack, dmScreenStream);
+  const offer = await dmCallPc.createOffer();
+  await dmCallPc.setLocalDescription(offer);
+  // reuse the signaling channel via a renegotiation signal
+  const cid = dmCallId(currentUser.uid, dmCallPartnerId);
+  await updateDoc(doc(db, 'dmCalls', cid), { callerSdp: offer.sdp, calleeSdp: null });
+  vTrack.onended = () => stopDMShare();
+  if (aTrack) aTrack.onended = () => stopDMShare();
+});
+
+async function stopDMShare() {
+  if (!dmIsSharing) return;
+  dmIsSharing = false;
+  if (dmScreenStream) { dmScreenStream.getTracks().forEach(t => t.stop()); dmScreenStream = null; }
+  removeDmShareTile(currentUser.uid);
+  if (dmCallPc) {
+    dmCallPc.getSenders().forEach(s => { if (s.track?.kind === 'video') { try { dmCallPc.removeTrack(s); } catch(_){} } });
+  }
+  document.getElementById('dmCallShareBtn').classList.remove('active');
+}
   if (!dmCallStream) return;
   dmCallMuted = !dmCallMuted;
   dmCallStream.getAudioTracks().forEach(t => t.enabled = !dmCallMuted);
