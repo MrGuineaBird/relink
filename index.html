@@ -231,6 +231,14 @@
     .screenshare-tile-label { position:absolute; bottom:6px; left:8px; background:rgba(0,0,0,0.65); color:#fff; font-size:11px; padding:2px 7px; border-radius:4px; pointer-events:none }
     .screenshare-tile-stop { position:absolute; top:6px; right:8px; background:#7c2d2d; color:#fff; border:none; border-radius:5px; padding:3px 9px; font-size:11px; cursor:pointer }
     .screenshare-tile-stop:hover { background:#993a3a }
+    .screenshare-tile-fs { position:absolute; top:6px; left:8px; background:rgba(0,0,0,0.5); color:#fff; border:none; border-radius:5px; padding:3px 8px; font-size:13px; cursor:pointer; transition:background .2s }
+    .screenshare-tile-fs:hover { background:rgba(255,255,255,0.2) }
+    .screenshare-tile:fullscreen video { width:100%; height:100%; object-fit:contain; background:#000 }
+    .screenshare-tile:fullscreen .screenshare-tile-fs { display:none }
+    .screenshare-tile-fs { position:absolute; top:6px; left:8px; background:rgba(0,0,0,0.55); color:#fff; border:none; border-radius:5px; padding:3px 8px; font-size:13px; cursor:pointer; transition:background .2s }
+    .screenshare-tile-fs:hover { background:rgba(0,0,0,0.85) }
+    .screenshare-tile:hover .screenshare-tile-fs { opacity:1 }
+    .screenshare-tile .screenshare-tile-fs { opacity:0; transition:opacity .2s }
 
     /* Right-click context menu */
     .ctx-menu { display:none; position:fixed; background:var(--panel); border-radius:8px; padding:6px; min-width:160px; box-shadow:0 4px 20px rgba(0,0,0,0.5); z-index:200; border:1px solid rgba(255,255,255,0.07) }
@@ -1603,7 +1611,6 @@ async function joinVoiceChannel(name) {
 async function callPeer(remoteUid, vcName) {
   const pc = createPC(remoteUid);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-  // If we're already sharing, add the screen track to this new connection too
   if (isSharing && screenStream) {
     screenStream.getVideoTracks().forEach(t => pc.addTrack(t, screenStream));
   }
@@ -1617,16 +1624,22 @@ async function callPeer(remoteUid, vcName) {
 async function handleOffer(sig, vcName) {
   const pc = createPC(sig.from);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-  // If we're already sharing, add the screen track to this new connection too
-  if (isSharing && screenStream) {
-    screenStream.getVideoTracks().forEach(t => pc.addTrack(t, screenStream));
-  }
+  // Set remote description FIRST, then add screen share track and renegotiate
   await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sig.sdp }));
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', sig.from, 'inbox'), {
     type: 'answer', from: currentUser.uid, sdp: answer.sdp
   });
+  // If we're sharing, send a fresh offer after answering so they get our video track too
+  if (isSharing && screenStream) {
+    screenStream.getVideoTracks().forEach(t => pc.addTrack(t, screenStream));
+    const reoffer = await pc.createOffer();
+    await pc.setLocalDescription(reoffer);
+    await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', sig.from, 'inbox'), {
+      type: 'offer', from: currentUser.uid, sdp: reoffer.sdp
+    });
+  }
 }
 
 async function handleAnswer(sig) {
@@ -1657,14 +1670,27 @@ function createPC(remoteUid) {
   pc.ontrack = e => {
     const track = e.track;
     if (track.kind === 'video') {
+      // Combine with any existing audio tracks from this peer's screen share
       addShareTile(remoteUid, e.streams[0], false);
       track.onended = () => removeShareTile(remoteUid);
     } else {
-      let audio = document.getElementById('vc-audio-' + remoteUid);
-      if (!audio) { audio = document.createElement('audio'); audio.id = 'vc-audio-' + remoteUid; document.body.appendChild(audio); }
-      audio.autoplay = true;
-      audio.srcObject = e.streams[0];
-      startVAD(remoteUid, e.streams[0]);
+      // Check if this audio belongs to a screen share stream or mic
+      const stream = e.streams[0];
+      const hasVideo = stream.getVideoTracks().length > 0;
+      if (hasVideo) {
+        // System audio from screen share — attach to the tile's video element
+        const tile = activeTiles[remoteUid];
+        if (tile) {
+          tile.querySelector('video').srcObject = stream;
+        }
+      } else {
+        // Mic audio
+        let audio = document.getElementById('vc-audio-' + remoteUid);
+        if (!audio) { audio = document.createElement('audio'); audio.id = 'vc-audio-' + remoteUid; document.body.appendChild(audio); }
+        audio.autoplay = true;
+        audio.srcObject = stream;
+        startVAD(remoteUid, stream);
+      }
     }
   };
 
@@ -1688,7 +1714,6 @@ function updateGridLayout() {
 
 function addShareTile(uid, stream, isSelf) {
   if (activeTiles[uid]) {
-    // Update stream on existing tile
     activeTiles[uid].querySelector('video').srcObject = stream;
     return;
   }
@@ -1700,16 +1725,36 @@ function addShareTile(uid, stream, isSelf) {
   const video = document.createElement('video');
   video.autoplay = true;
   video.playsInline = true;
+  video.muted = isSelf; // mute own tile to prevent echo; remote tiles play system audio
   video.srcObject = stream;
   tile.appendChild(video);
 
   const label = document.createElement('div');
   label.className = 'screenshare-tile-label';
-  // Look up display name from vc-row if available
   const row = document.getElementById('vc-row-' + uid);
   const name = row ? row.querySelector('span')?.textContent : (isSelf ? (myDisplayName || myUsername) : uid);
   label.textContent = '🖥️ ' + name;
   tile.appendChild(label);
+
+  // Fullscreen button
+  const fsBtn = document.createElement('button');
+  fsBtn.className = 'screenshare-tile-fs';
+  fsBtn.textContent = '⛶';
+  fsBtn.title = 'Fullscreen';
+  fsBtn.onclick = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      tile.requestFullscreen().catch(() => video.requestFullscreen().catch(() => {}));
+    }
+  };
+  tile.appendChild(fsBtn);
+
+  // Double-click tile to fullscreen
+  video.ondblclick = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else tile.requestFullscreen().catch(() => {});
+  };
 
   if (isSelf) {
     const stopBtn = document.createElement('button');
@@ -1771,34 +1816,48 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
   if (isSharing) { stopScreenShare(); return; }
   if (!currentVcChannel) return alert('Join a voice channel first.');
   try {
-    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        sampleRate: 44100
+      }
+    });
   } catch (e) { return; }
 
   isSharing = true;
   document.getElementById('vcShareBtn').textContent = '🛑 Stop';
   document.getElementById('vcShareBtn').classList.add('active');
 
-  // Show own tile
   addShareTile(currentUser.uid, screenStream, true);
 
   const videoTrack = screenStream.getVideoTracks()[0];
+  const audioTrack = screenStream.getAudioTracks()[0] || null;
 
-  // Push to all peers
+  // Push video + system audio to all peers
   for (const [uid, pc] of Object.entries(peerConnections)) {
-    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-    if (sender) {
-      await sender.replaceTrack(videoTrack);
+    const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (videoSender) {
+      await videoSender.replaceTrack(videoTrack);
     } else {
       pc.addTrack(videoTrack, screenStream);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
-        type: 'offer', from: currentUser.uid, sdp: offer.sdp
-      });
     }
+    // Add system audio as a separate track if available
+    if (audioTrack) {
+      const audioSender = pc.getSenders().find(s => s.track?.id === audioTrack.id);
+      if (!audioSender) pc.addTrack(audioTrack, screenStream);
+    }
+    // Renegotiate
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
+      type: 'offer', from: currentUser.uid, sdp: offer.sdp
+    });
   }
 
   videoTrack.onended = () => stopScreenShare();
+  if (audioTrack) audioTrack.onended = () => stopScreenShare();
 });
 
 async function stopScreenShare() {
@@ -1825,17 +1884,17 @@ document.getElementById('vcLeaveBtn').addEventListener('click', leaveVoiceChanne
 
 const FIREBASE_PROJECT = 'relink-fbfa5';
 let heartbeatInterval = null;
+let cachedAuthToken = null;
 
-async function getAuthToken() {
-  try { return await currentUser?.getIdToken(); } catch (_) { return null; }
+// Keep token fresh — refresh every 50 minutes (tokens last 1 hour)
+async function refreshCachedToken() {
+  try { cachedAuthToken = await currentUser?.getIdToken(true); } catch (_) { cachedAuthToken = null; }
 }
 
-async function deleteParticipantBeacon(serverId, vcName, uid) {
-  const token = await getAuthToken();
-  if (!token) return;
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/servers/${serverId}/vc/${vcName}/participants/${uid}`;
-  // keepalive: true survives tab close
-  fetch(url, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+function firestoreDeleteBeacon(path) {
+  if (!cachedAuthToken) return;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/${path}`;
+  fetch(url, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${cachedAuthToken}` } }).catch(() => {});
 }
 
 function startVcHeartbeat(serverId, vcName) {
@@ -1846,15 +1905,16 @@ function startVcHeartbeat(serverId, vcName) {
       await updateDoc(doc(db, 'servers', serverId, 'vc', vcName, 'participants', currentUser.uid), {
         lastSeen: serverTimestamp()
       });
+      // Refresh cached token periodically
+      cachedAuthToken = await currentUser.getIdToken();
     } catch (_) {}
-  }, 10000); // every 10 s
+  }, 10000);
 }
 
 function stopVcHeartbeat() {
   if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
 }
 
-// Purge participants whose heartbeat is >25 s old (they closed their tab)
 async function purgeStaleParticipants(serverId, vcName) {
   const snap = await getDocs(collection(db, 'servers', serverId, 'vc', vcName, 'participants'));
   const cutoff = Date.now() - 25000;
@@ -1866,23 +1926,25 @@ async function purgeStaleParticipants(serverId, vcName) {
   }
 }
 
-// Tab close — use keepalive fetch to reliably delete presence
-async function handleTabClose() {
+// Tab close — synchronous, uses pre-cached token with keepalive fetch
+function handleTabClose() {
   stopVcHeartbeat();
   if (currentVcChannel && currentServer && currentUser) {
-    await deleteParticipantBeacon(currentServer, currentVcChannel, currentUser.uid);
+    firestoreDeleteBeacon(`servers/${currentServer}/vc/${currentVcChannel}/participants/${currentUser.uid}`);
   }
-  if (currentUser && currentServer) {
-    const token = await getAuthToken();
-    if (token) {
-      const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents/servers/${currentServer}/presence/${currentUser.uid}`;
-      fetch(url, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-    }
+  if (currentServer && currentUser) {
+    firestoreDeleteBeacon(`servers/${currentServer}/presence/${currentUser.uid}`);
   }
 }
 
 window.addEventListener('pagehide', handleTabClose);
 window.addEventListener('beforeunload', handleTabClose);
+
+// Cache token on login so it's ready for tab-close
+onAuthStateChanged(auth, async user => {
+  if (user) { try { cachedAuthToken = await user.getIdToken(); } catch (_) {} }
+  else { cachedAuthToken = null; }
+});
 </script>
 </body>
 </html>
