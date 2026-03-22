@@ -801,6 +801,9 @@ async function login() {
       emailToUse = snap.docs[0].data().email || usernameToEmail(u);
     }
     await signInWithEmailAndPassword(auth, emailToUse, p);
+    // Force token refresh so emailVerified is current
+    await auth.currentUser?.reload();
+    await auth.currentUser?.getIdToken(true);
   } catch (e) {
     err.textContent = 'Invalid username or password.';
   }
@@ -814,7 +817,8 @@ async function logout() {
 onAuthStateChanged(auth, async user => {
   if (user) {
     // Check email verification
-    if (!user.emailVerified) {
+    // Skip verification check for legacy accounts using fake @relink.local email
+    if (!user.emailVerified && !user.email.endsWith('@relink.local')) {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('verifyScreen').style.display = 'flex';
       document.getElementById('app').style.display = 'none';
