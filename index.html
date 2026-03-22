@@ -542,6 +542,7 @@
         <div class="dm-call-status" id="dmCallStatus">Calling…</div>
         <div class="dm-call-controls">
           <button class="dm-call-btn" id="dmCallMuteBtn" title="Mute"><img class="ri" src="relinkicons/mutebutton.svg" alt="mute"></button>
+          <button class="dm-call-btn" id="dmCallCamBtn" title="Camera" style="display:none">📷</button>
           <button class="dm-call-btn" id="dmCallShareBtn" title="Share Screen" style="display:none"><img class="ri" src="relinkicons/screenshare.svg" alt="share"></button>
           <button class="dm-call-btn end" id="dmCallEndBtn" title="End call"><img class="ri" src="relinkicons/endcall.svg" alt="end call"></button>
         </div>
@@ -2661,7 +2662,7 @@ const activeTiles = {}; // uid → tile element
 function updateGridLayout() {
   const grid = document.getElementById('screenshareGrid');
   const overlay = document.getElementById('screenshareOverlay');
-  const count = Object.keys(activeTiles).length;
+  const count = Object.keys(activeTiles).length + Object.keys(camTiles).length;
   if (count === 0) { overlay.classList.remove('visible'); return; }
   overlay.classList.add('visible');
   grid.className = 'screenshare-grid';
@@ -3094,7 +3095,10 @@ let dmCallIceCallerCount = 0;
 let dmCallIceCalleeCount = 0;
 let dmScreenStream    = null;
 let dmIsSharing       = false;
+let dmCameraStream    = null;
+let dmIsCameraOn      = false;
 const dmShareTiles    = {};
+const dmCamTiles      = {};
 
 function dmCallId(uid1, uid2) { return [uid1, uid2].sort().join('_'); }
 
@@ -3155,18 +3159,23 @@ function listenDMCallDoc(cid, isCaller) {
 
     if (data.status === 'ended') { endDMCall(false); return; }
 
+    // Store partner's camera stream ID so ontrack can identify it
+    if (dmCallPc && data.camStreamId) {
+      dmCallPc._theirCamStreamId = data.camStreamId;
+    }
+
     if (isCaller) {
-      // Caller: wait for accepted, then create offer
       if (data.status === 'accepted' && !dmCallRtcReady) {
         dmCallRtcReady = true;
         document.getElementById('dmCallStatus').textContent = 'Connecting…';
         await initDMCallRTC(cid, true);
       }
-      // Caller: got callee's answer
-      if (data.calleeSdp && dmCallPc && !dmCallPc.remoteDescription) {
-        await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.calleeSdp });
+      // Got callee's answer (initial or renegotiation)
+      if (data.calleeSdp && dmCallPc) {
+        if (!dmCallPc.remoteDescription || dmCallPc.signalingState === 'have-local-offer') {
+          try { await dmCallPc.setRemoteDescription({ type: 'answer', sdp: data.calleeSdp }); } catch(_) {}
+        }
       }
-      // Caller: process new callee ICE candidates
       if (data.iceCallee && dmCallPc?.remoteDescription) {
         const newCandidates = data.iceCallee.slice(dmCallIceCalleeCount);
         for (const c of newCandidates) {
@@ -3175,16 +3184,28 @@ function listenDMCallDoc(cid, isCaller) {
         dmCallIceCalleeCount = data.iceCallee.length;
       }
     } else {
-      // Callee: got caller's offer
-      if (data.callerSdp && !dmCallRtcReady) {
+      // Got caller's offer (initial or renegotiation for camera/share)
+      if (data.callerSdp && dmCallPc) {
+        if (!dmCallRtcReady) {
+          dmCallRtcReady = true;
+          await initDMCallRTC(cid, false);
+        }
+        try {
+          await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
+          const answer = await dmCallPc.createAnswer();
+          await dmCallPc.setLocalDescription(answer);
+          await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
+        } catch(_) {}
+      } else if (data.callerSdp && !dmCallRtcReady) {
         dmCallRtcReady = true;
         await initDMCallRTC(cid, false);
-        await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
-        const answer = await dmCallPc.createAnswer();
-        await dmCallPc.setLocalDescription(answer);
-        await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
+        try {
+          await dmCallPc.setRemoteDescription({ type: 'offer', sdp: data.callerSdp });
+          const answer = await dmCallPc.createAnswer();
+          await dmCallPc.setLocalDescription(answer);
+          await updateDoc(doc(db, 'dmCalls', cid), { calleeSdp: answer.sdp });
+        } catch(_) {}
       }
-      // Callee: process new caller ICE candidates
       if (data.iceCaller && dmCallPc?.remoteDescription) {
         const newCandidates = data.iceCaller.slice(dmCallIceCallerCount);
         for (const c of newCandidates) {
@@ -3208,8 +3229,15 @@ async function initDMCallRTC(cid, isCaller) {
 
   dmCallPc.ontrack = e => {
     if (e.track.kind === 'video') {
-      addDmShareTile(dmCallPartnerId, e.streams[0]);
-      e.track.onended = () => removeDmShareTile(dmCallPartnerId);
+      // Distinguish camera vs screenshare by stream ID stored on call doc
+      const isCamera = e.streams[0]?.id && e.streams[0].id === dmCallPc._theirCamStreamId;
+      if (isCamera) {
+        addDmCamTile(dmCallPartnerId, e.streams[0]);
+        e.track.onended = () => removeDmCamTile(dmCallPartnerId);
+      } else {
+        addDmShareTile(dmCallPartnerId, e.streams[0]);
+        e.track.onended = () => removeDmShareTile(dmCallPartnerId);
+      }
     } else {
       let audio = document.getElementById('dm-call-audio');
       if (!audio) { audio = document.createElement('audio'); audio.id = 'dm-call-audio'; document.body.appendChild(audio); }
@@ -3218,6 +3246,7 @@ async function initDMCallRTC(cid, isCaller) {
       startDMCallVAD('them', e.streams[0]);
       document.getElementById('dmCallStatus').textContent = 'Connected';
       document.getElementById('dmCallShareBtn').style.display = 'flex';
+      document.getElementById('dmCallCamBtn').style.display = 'flex';
     }
   };
 
@@ -3225,6 +3254,7 @@ async function initDMCallRTC(cid, isCaller) {
     if (dmCallPc?.connectionState === 'connected') {
       document.getElementById('dmCallStatus').textContent = 'Connected';
       document.getElementById('dmCallShareBtn').style.display = 'flex';
+      document.getElementById('dmCallCamBtn').style.display = 'flex';
     }
   };
 
@@ -3282,12 +3312,14 @@ async function endDMCall(writeEnd = true) {
   dmCallIceCallerCount = 0;
   dmCallIceCalleeCount = 0;
   await stopDMShare();
+  await stopDMCamera();
   if (dmCallPc)    { dmCallPc.close(); dmCallPc = null; }
   if (dmCallStream){ dmCallStream.getTracks().forEach(t => t.stop()); dmCallStream = null; }
   if (unsubDmCall) { unsubDmCall(); unsubDmCall = null; }
   if (dmCallVADSelf) { clearInterval(dmCallVADSelf.id); try { dmCallVADSelf.ctx.close(); } catch(_){} dmCallVADSelf = null; }
   if (dmCallVADThem) { clearInterval(dmCallVADThem.id); try { dmCallVADThem.ctx.close(); } catch(_){} dmCallVADThem = null; }
   Object.keys(dmShareTiles).forEach(uid => removeDmShareTile(uid));
+  Object.keys(dmCamTiles).forEach(uid => removeDmCamTile(uid));
   const audio = document.getElementById('dm-call-audio');
   if (audio) audio.remove();
   document.getElementById('dmCallOverlay').classList.remove('visible');
@@ -3296,6 +3328,9 @@ async function endDMCall(writeEnd = true) {
   document.getElementById('dmCallTheirAvatar').classList.remove('speaking');
   document.getElementById('dmCallShareBtn').style.display = 'none';
   document.getElementById('dmCallShareBtn').classList.remove('active');
+  document.getElementById('dmCallCamBtn').style.display = 'none';
+  document.getElementById('dmCallCamBtn').textContent = '📷';
+  document.getElementById('dmCallCamBtn').classList.remove('active');
   dmCallMuted = false;
   document.getElementById('dmCallMuteBtn').innerHTML = '<img src="relinkicons/mutebutton.svg" class="ri-icon">';
   document.getElementById('dmCallMuteBtn').classList.remove('active');
@@ -3366,12 +3401,92 @@ function removeDmShareTile(uid) {
 
 function updateDmShareGrid() {
   const grid = document.getElementById('dmCallShareGrid');
-  const count = Object.keys(dmShareTiles).length;
+  const count = Object.keys(dmShareTiles).length + Object.keys(dmCamTiles).length;
   if (count === 0) { grid.classList.remove('visible','one','two','three'); return; }
   grid.className = 'dm-call-share-grid visible';
   if (count === 1) grid.classList.add('one');
   else if (count === 2) grid.classList.add('two');
   else grid.classList.add('three');
+}
+
+// ── DM camera tile helpers ─────────────────────────────────────────
+function addDmCamTile(uid, stream) {
+  const grid = document.getElementById('dmCallShareGrid');
+  if (dmCamTiles[uid]) { dmCamTiles[uid].querySelector('video').srcObject = stream; return; }
+  const tile = document.createElement('div');
+  tile.style.cssText = 'position:relative;background:#0a0d14;overflow:hidden;display:flex;align-items:center;justify-content:center';
+  const video = document.createElement('video');
+  video.autoplay = true; video.playsInline = true;
+  video.muted = (uid === currentUser.uid);
+  video.srcObject = stream;
+  video.style.cssText = 'width:100%;height:100%;object-fit:cover';
+  video.ondblclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else tile.requestFullscreen().catch(()=>{}); };
+  tile.appendChild(video);
+  const badge = document.createElement('div');
+  badge.style.cssText = 'position:absolute;top:6px;left:8px;background:rgba(0,0,0,0.55);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;pointer-events:none';
+  badge.textContent = '📷 Camera';
+  tile.appendChild(badge);
+  if (uid === currentUser.uid) {
+    const stopBtn = document.createElement('button');
+    stopBtn.style.cssText = 'position:absolute;top:6px;right:8px;background:#7c2d2d;color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:11px;cursor:pointer';
+    stopBtn.textContent = 'Stop';
+    stopBtn.onclick = stopDMCamera;
+    tile.appendChild(stopBtn);
+  }
+  dmCamTiles[uid] = tile;
+  grid.appendChild(tile);
+  updateDmShareGrid();
+}
+
+function removeDmCamTile(uid) {
+  if (!dmCamTiles[uid]) return;
+  dmCamTiles[uid].remove();
+  delete dmCamTiles[uid];
+  updateDmShareGrid();
+}
+
+// ── DM camera button ───────────────────────────────────────────────
+document.getElementById('dmCallCamBtn').addEventListener('click', async () => {
+  if (dmIsCameraOn) { stopDMCamera(); return; }
+  if (!dmCallPc) return;
+  try {
+    dmCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      audio: false
+    });
+  } catch (e) { alert('Could not access camera: ' + e.message); return; }
+
+  dmIsCameraOn = true;
+  document.getElementById('dmCallCamBtn').textContent = '📷 Stop';
+  document.getElementById('dmCallCamBtn').classList.add('active');
+
+  addDmCamTile(currentUser.uid, dmCameraStream);
+
+  const vTrack = dmCameraStream.getVideoTracks()[0];
+  // Store our cam stream ID on the PC so remote ontrack can identify it
+  dmCallPc._myCamStreamId = dmCameraStream.id;
+  dmCallPc.addTrack(vTrack, dmCameraStream);
+
+  const cid = dmCallId(currentUser.uid, dmCallPartnerId);
+  const offer = await dmCallPc.createOffer();
+  await dmCallPc.setLocalDescription(offer);
+  await updateDoc(doc(db, 'dmCalls', cid), { callerSdp: offer.sdp, calleeSdp: null, camStreamId: dmCameraStream.id });
+
+  vTrack.onended = () => stopDMCamera();
+});
+
+async function stopDMCamera() {
+  if (!dmIsCameraOn) return;
+  dmIsCameraOn = false;
+  if (dmCameraStream) { dmCameraStream.getTracks().forEach(t => t.stop()); dmCameraStream = null; }
+  removeDmCamTile(currentUser.uid);
+  document.getElementById('dmCallCamBtn').textContent = '📷';
+  document.getElementById('dmCallCamBtn').classList.remove('active');
+  if (dmCallPc) {
+    dmCallPc.getSenders().forEach(s => {
+      if (s.track?.kind === 'video' && !dmIsSharing) { try { dmCallPc.removeTrack(s); } catch(_){} }
+    });
+  }
 }
 
 document.getElementById('dmCallShareBtn').addEventListener('click', async () => {
