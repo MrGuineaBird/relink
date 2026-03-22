@@ -356,8 +356,8 @@
     .vc-item-icon { font-size:15px; flex-shrink:0 }
     .vc-participants { padding:2px 10px 4px 28px; display:flex; flex-direction:column; gap:3px }
     .vc-participant { font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px }
-    .vc-participant-avatar { width:20px; height:20px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; overflow:hidden; flex-shrink:0 }
-    .vc-participant-avatar img { width:100%; height:100%; object-fit:cover }
+    .vc-participant-avatar { width:20px; height:20px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; flex-shrink:0; position:relative; overflow:hidden }
+    .vc-participant-avatar img { width:100%; height:100%; object-fit:cover; border-radius:50% }
     .vc-participant.speaking { color:var(--text) }
     .vc-participant.speaking .vc-participant-avatar { box-shadow:0 0 0 2px #3ba55c }
     .vc-participant.muted .vc-participant-avatar { box-shadow:0 0 0 2px #ed4245 }
@@ -385,9 +385,12 @@
     .screenshare-grid.four  { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr }
     .screenshare-tile { position:relative; background:#0d1017; border-radius:6px; overflow:hidden; display:flex; align-items:center; justify-content:center }
     .screenshare-tile video { width:100%; height:100%; object-fit:contain }
+    .screenshare-tile.cam-tile video { object-fit:cover }
     .screenshare-tile-label { position:absolute; bottom:6px; left:8px; background:rgba(0,0,0,0.65); color:#fff; font-size:11px; padding:2px 7px; border-radius:4px; pointer-events:none }
+    .screenshare-tile-type { position:absolute; top:6px; left:8px; background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:2px 6px; border-radius:4px; pointer-events:none }
     .screenshare-tile-stop { position:absolute; top:6px; right:8px; background:#7c2d2d; color:#fff; border:none; border-radius:5px; padding:3px 9px; font-size:11px; cursor:pointer }
     .screenshare-tile-stop:hover { background:#993a3a }
+    .vc-participant.camera-on .vc-participant-avatar::after { content:'📷'; position:absolute; bottom:-2px; right:-4px; font-size:9px; background:var(--muted); border-radius:50%; padding:1px }
     .screenshare-tile-fs { position:absolute; top:6px; left:8px; background:rgba(0,0,0,0.5); color:#fff; border:none; border-radius:5px; padding:3px 8px; font-size:13px; cursor:pointer; transition:background .2s }
     .screenshare-tile-fs:hover { background:rgba(255,255,255,0.2) }
     .screenshare-tile:fullscreen video { width:100%; height:100%; object-fit:contain; background:#000 }
@@ -508,6 +511,7 @@
       </div>
       <div class="vc-controls">
         <button class="vc-ctrl-btn" id="vcMuteBtn" title="Mute"><img class="ri-sm" src="relinkicons/mutebutton.svg" alt="mute"> Mute</button>
+        <button class="vc-ctrl-btn" id="vcCamBtn" title="Camera">📷 Cam</button>
         <button class="vc-ctrl-btn" id="vcShareBtn" title="Share Screen"><img class="ri-sm" src="relinkicons/screenshare.svg" alt="share"> Share</button>
         <button class="vc-ctrl-btn leave" id="vcLeaveBtn"><img class="ri-sm" src="relinkicons/leavevc.svg" alt="leave"> Leave</button>
       </div>
@@ -2361,14 +2365,18 @@ function appendDM(m) {
 let currentVcChannel = null;
 let localStream      = null;
 let screenStream     = null;
+let cameraStream     = null;   // local camera
 let isSharing        = false;
+let isCameraOn       = false;
 let isMuted          = false;
-const peerConnections = {};      // uid → RTCPeerConnection
-const iceQueues       = {};      // uid → pending ICE candidates before remote desc set
+const peerConnections = {};
+const iceQueues       = {};
 let vcParticipantsUnsub = null;
-let unsubSignals        = null;  // signal inbox listener — must be cleared on leave
+let unsubSignals        = null;
 const vadIntervals = {};
 const vcParticipantData = {};
+const camTiles = {};   // uid → camera tile element
+const camStreamIds = {}; // uid → their cameraStream.id (so ontrack can route correctly)
 
 const ICE_SERVERS = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -2429,7 +2437,7 @@ function addVcChannelItem(name) {
       const p = d.data();
       vcParticipantData[p.uid] = p;
       const row = document.createElement('div');
-      row.className = 'vc-participant' + (p.muted ? ' muted' : '');
+      row.className = 'vc-participant' + (p.muted ? ' muted' : '') + (p.camera ? ' camera-on' : '');
       row.id = 'vc-row-' + p.uid;
       const av = document.createElement('div');
       av.className = 'vc-participant-avatar';
@@ -2439,6 +2447,13 @@ function addVcChannelItem(name) {
       nm.textContent = p.displayName || p.username;
       row.appendChild(av);
       row.appendChild(nm);
+      if (p.camera) {
+        const camIcon = document.createElement('span');
+        camIcon.className = 'vc-mute-icon';
+        camIcon.textContent = '📷';
+        camIcon.title = 'Camera on';
+        row.appendChild(camIcon);
+      }
       if (p.muted) {
         const muteIcon = document.createElement('span');
         muteIcon.className = 'vc-mute-icon';
@@ -2526,25 +2541,35 @@ async function joinVoiceChannel(name) {
 async function callPeer(remoteUid, vcName) {
   const pc = createPC(remoteUid);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  if (isCameraOn && cameraStream) {
+    cameraStream.getTracks().forEach(t => pc.addTrack(t, cameraStream));
+  }
   if (isSharing && screenStream) {
     screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
   }
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', remoteUid, 'inbox'), {
-    type: 'offer', from: currentUser.uid, sdp: offer.sdp
+    type: 'offer', from: currentUser.uid, sdp: offer.sdp,
+    cameraStreamId: (isCameraOn && cameraStream) ? cameraStream.id : null
   });
 }
 
 async function handleOffer(sig, vcName) {
   const pc = createPC(sig.from);
+  // Store their camera stream ID so ontrack can route video correctly
+  if (sig.cameraStreamId) camStreamIds[sig.from] = sig.cameraStreamId;
+  else delete camStreamIds[sig.from];
+
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  if (isCameraOn && cameraStream) {
+    cameraStream.getTracks().forEach(t => pc.addTrack(t, cameraStream));
+  }
   if (isSharing && screenStream) {
     screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
   }
   await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sig.sdp }));
 
-  // Flush any queued ICE candidates
   for (const c of (iceQueues[sig.from] || [])) {
     try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
   }
@@ -2553,15 +2578,17 @@ async function handleOffer(sig, vcName) {
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   await addDoc(collection(db, 'servers', currentServer, 'vc', vcName, 'signals', sig.from, 'inbox'), {
-    type: 'answer', from: currentUser.uid, sdp: answer.sdp
+    type: 'answer', from: currentUser.uid, sdp: answer.sdp,
+    cameraStreamId: (isCameraOn && cameraStream) ? cameraStream.id : null
   });
 }
 
 async function handleAnswer(sig) {
   const pc = peerConnections[sig.from];
   if (!pc) return;
+  if (sig.cameraStreamId) camStreamIds[sig.from] = sig.cameraStreamId;
+  else delete camStreamIds[sig.from];
   await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sig.sdp }));
-  // Flush queued ICE candidates
   for (const c of (iceQueues[sig.from] || [])) {
     try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
   }
@@ -2594,12 +2621,16 @@ function createPC(remoteUid) {
   };
 
   pc.ontrack = e => {
-    // Use track.kind directly — don't rely on stream contents which may be incomplete
     if (e.track.kind === 'video') {
-      addShareTile(remoteUid, e.streams[0], false);
-      e.track.onended = () => removeShareTile(remoteUid);
+      const isCamera = camStreamIds[remoteUid] && e.streams[0]?.id === camStreamIds[remoteUid];
+      if (isCamera) {
+        addCamTile(remoteUid, e.streams[0]);
+        e.track.onended = () => removeCamTile(remoteUid);
+      } else {
+        addShareTile(remoteUid, e.streams[0], false);
+        e.track.onended = () => removeShareTile(remoteUid);
+      }
     } else {
-      // Audio — check if it's already handled as a share tile stream
       const existingTile = activeTiles[remoteUid];
       if (existingTile && existingTile.querySelector('video').srcObject === e.streams[0]) return;
       let audio = document.getElementById('vc-audio-' + remoteUid);
@@ -2709,27 +2740,155 @@ function removeShareTile(uid) {
   updateGridLayout();
 }
 
+// ── Camera tile helpers ────────────────────────────────────────────
+function addCamTile(uid, stream) {
+  if (camTiles[uid]) {
+    camTiles[uid].querySelector('video').srcObject = stream;
+    return;
+  }
+  const grid = document.getElementById('screenshareGrid');
+  const tile = document.createElement('div');
+  tile.className = 'screenshare-tile cam-tile';
+  tile.id = 'cam-tile-' + uid;
+
+  const video = document.createElement('video');
+  video.autoplay = true;
+  video.playsInline = true;
+  video.muted = (uid === currentUser.uid);
+  video.srcObject = stream;
+  video.ondblclick = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else tile.requestFullscreen().catch(() => {});
+  };
+  tile.appendChild(video);
+
+  const typeTag = document.createElement('div');
+  typeTag.className = 'screenshare-tile-type';
+  typeTag.textContent = '📷 Camera';
+  tile.appendChild(typeTag);
+
+  const p = vcParticipantData[uid];
+  const label = document.createElement('div');
+  label.className = 'screenshare-tile-label';
+  label.textContent = p ? (p.displayName || p.username) : (uid === currentUser.uid ? (myDisplayName || myUsername) : uid);
+  tile.appendChild(label);
+
+  if (uid === currentUser.uid) {
+    const stopBtn = document.createElement('button');
+    stopBtn.className = 'screenshare-tile-stop';
+    stopBtn.textContent = 'Stop';
+    stopBtn.onclick = stopCamera;
+    tile.appendChild(stopBtn);
+  }
+
+  camTiles[uid] = tile;
+  grid.appendChild(tile);
+  updateGridLayout();
+}
+
+function removeCamTile(uid) {
+  if (!camTiles[uid]) return;
+  camTiles[uid].remove();
+  delete camTiles[uid];
+  // Update participant row
+  const row = document.getElementById('vc-row-' + uid);
+  if (row) row.classList.remove('camera-on');
+  updateGridLayout();
+}
+
+// ── Camera controls ────────────────────────────────────────────────
+document.getElementById('vcCamBtn').addEventListener('click', async () => {
+  if (isCameraOn) { stopCamera(); return; }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+  } catch (e) { alert('Could not access camera: ' + e.message); return; }
+
+  isCameraOn = true;
+  document.getElementById('vcCamBtn').textContent = '📷 Stop';
+  document.getElementById('vcCamBtn').classList.add('active');
+
+  // Show our own camera tile
+  addCamTile(currentUser.uid, cameraStream);
+
+  // Mark participant row
+  const myRow = document.getElementById('vc-row-' + currentUser.uid);
+  if (myRow) myRow.classList.add('camera-on');
+
+  // Update Firestore so others see camera indicator
+  if (currentServer && currentVcChannel) {
+    try { await updateDoc(doc(db, 'servers', currentServer, 'vc', currentVcChannel, 'participants', currentUser.uid), { camera: true }); } catch (_) {}
+  }
+
+  // Renegotiate with all peers — include camera stream ID in offer
+  const videoTrack = cameraStream.getVideoTracks()[0];
+  for (const [uid, pc] of Object.entries(peerConnections)) {
+    const existingSender = pc.getSenders().find(s => s.track?.kind === 'video' && s.track?.id === videoTrack.id);
+    if (!existingSender) pc.addTrack(videoTrack, cameraStream);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
+      type: 'offer', from: currentUser.uid, sdp: offer.sdp,
+      cameraStreamId: cameraStream.id
+    });
+  }
+
+  cameraStream.getVideoTracks()[0].onended = () => stopCamera();
+});
+
+async function stopCamera() {
+  if (!isCameraOn) return;
+  isCameraOn = false;
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  removeCamTile(currentUser.uid);
+
+  document.getElementById('vcCamBtn').textContent = '📷 Cam';
+  document.getElementById('vcCamBtn').classList.remove('active');
+
+  // Update Firestore
+  if (currentServer && currentVcChannel) {
+    try { await updateDoc(doc(db, 'servers', currentServer, 'vc', currentVcChannel, 'participants', currentUser.uid), { camera: false }); } catch (_) {}
+  }
+
+  // Remove camera sender and renegotiate
+  for (const [uid, pc] of Object.entries(peerConnections)) {
+    pc.getSenders().forEach(s => {
+      if (s.track?.kind === 'video' && activeTiles[currentUser.uid] === undefined) {
+        try { pc.removeTrack(s); } catch (_) {}
+      }
+    });
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await addDoc(collection(db, 'servers', currentServer, 'vc', currentVcChannel, 'signals', uid, 'inbox'), {
+        type: 'offer', from: currentUser.uid, sdp: offer.sdp, cameraStreamId: null
+      });
+    } catch (_) {}
+  }
+}
+
 // ── Screen share controls ──────────────────────────────────────────
 
 async function leaveVoiceChannel() {
   if (!currentVcChannel) return;
   stopVcHeartbeat();
   await stopScreenShare();
+  await stopCamera();
   const name = currentVcChannel;
   currentVcChannel = null;
 
-  // Unsubscribe signal listener first
   if (unsubSignals) { unsubSignals(); unsubSignals = null; }
 
   try { await deleteDoc(doc(db, 'servers', currentServer, 'vc', name, 'participants', currentUser.uid)); } catch (_) {}
   Object.values(peerConnections).forEach(pc => pc.close());
   Object.keys(peerConnections).forEach(k => { stopVAD(k); delete peerConnections[k]; });
   Object.keys(iceQueues).forEach(k => delete iceQueues[k]);
+  Object.keys(camStreamIds).forEach(k => delete camStreamIds[k]);
 
   stopVAD(currentUser.uid);
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   document.querySelectorAll('[id^="vc-audio-"]').forEach(el => el.remove());
   Object.keys(activeTiles).forEach(uid => removeShareTile(uid));
+  Object.keys(camTiles).forEach(uid => removeCamTile(uid));
   Object.keys(vcParticipantData).forEach(k => delete vcParticipantData[k]);
 
   document.getElementById('vcActiveBar').classList.remove('visible');
