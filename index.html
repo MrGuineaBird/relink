@@ -1561,8 +1561,12 @@ async function joinVoiceChannel(name) {
     username: myUsername,
     displayName: myDisplayName || myUsername,
     avatar: myAvatar || null,
-    joinedAt: serverTimestamp()
+    joinedAt: serverTimestamp(),
+    lastSeen: serverTimestamp()
   });
+
+  await purgeStaleParticipants(currentServer, name);
+  startVcHeartbeat(currentServer, name);
 
   // Highlight VC item
   document.querySelectorAll('.vc-item').forEach(el => {
@@ -1731,6 +1735,7 @@ function removeShareTile(uid) {
 
 async function leaveVoiceChannel() {
   if (!currentVcChannel) return;
+  stopVcHeartbeat();
   await stopScreenShare();
   const name = currentVcChannel;
   currentVcChannel = null;
@@ -1861,30 +1866,12 @@ async function purgeStaleParticipants(serverId, vcName) {
   }
 }
 
-// Patch joinVoiceChannel to start heartbeat + purge stale on join
-const _origJoin = joinVoiceChannel;
-async function joinVoiceChannel(name) {
-  await _origJoin(name);
-  if (currentVcChannel) {
-    await purgeStaleParticipants(currentServer, name);
-    startVcHeartbeat(currentServer, name);
-  }
-}
-
-// Patch leaveVoiceChannel to stop heartbeat
-const _origLeave = leaveVoiceChannel;
-async function leaveVoiceChannel() {
-  stopVcHeartbeat();
-  await _origLeave();
-}
-
 // Tab close — use keepalive fetch to reliably delete presence
 async function handleTabClose() {
   stopVcHeartbeat();
   if (currentVcChannel && currentServer && currentUser) {
     await deleteParticipantBeacon(currentServer, currentVcChannel, currentUser.uid);
   }
-  // Also clear general presence
   if (currentUser && currentServer) {
     const token = await getAuthToken();
     if (token) {
