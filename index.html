@@ -442,12 +442,27 @@
       <input id="usernameInput" type="text" placeholder="" autocomplete="off">
     </div>
     <div class="login-field">
-      <label>Password <span>*</span></label>
+      <label style="display:flex;justify-content:space-between">Password <span>*</span><a id="forgotPasswordLink" style="font-size:12px;font-weight:400;cursor:pointer;color:var(--accent-hover)">Forgot your password?</a></label>
       <input id="passwordInput" type="password" placeholder="">
     </div>
     <div id="loginError"></div>
     <button class="login-submit" id="loginBtn">Log In</button>
     <div class="login-switch">Need an account? <a id="switchToSignup">Register</a></div>
+  </div>
+
+  <!-- FORGOT PASSWORD PANEL -->
+  <div class="login-box" id="resetPanel" style="display:none">
+    <h2>Reset your password</h2>
+    <p class="login-sub">Enter your email and we'll send you a reset link.</p>
+    <div class="login-field">
+      <label>Email <span>*</span></label>
+      <input id="resetEmailInput" type="email" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div id="resetMsg" style="font-size:13px;margin-top:8px;min-height:18px;text-align:center"></div>
+    <button class="login-submit" id="resetBtn">Send Reset Email</button>
+    <div class="login-switch" style="margin-top:10px">
+      <a id="switchToLoginFromReset">Back to Login</a>
+    </div>
   </div>
 
   <!-- SIGNUP PANEL (hidden by default) -->
@@ -515,7 +530,6 @@
     </div>
     <div class="channel-list" id="channelList"></div>
     <div class="vc-active-bar" id="vcActiveBar">
-      <!-- Top: voice status + action icons -->
       <div class="vc-status-row">
         <div class="vc-status-left">
           <div class="vc-active-bar-name" id="vcActiveBarName">
@@ -524,31 +538,15 @@
           <div class="vc-active-bar-server" id="vcActiveBarServer"></div>
         </div>
         <div class="vc-status-right">
+          <button class="vc-icon-btn" id="vcMuteBtn" title="Mute">
+            <img class="ri-sm" src="relinkicons/mutebutton.svg" alt="mute">
+          </button>
           <button class="vc-icon-btn" id="vcCamBtn" title="Camera">📷</button>
           <button class="vc-icon-btn" id="vcShareBtn" title="Share Screen">
             <img class="ri-sm" src="relinkicons/screenshare.svg" alt="share">
           </button>
           <button class="vc-icon-btn danger" id="vcLeaveBtn" title="Disconnect">
             <img class="ri-sm" src="relinkicons/leavevc.svg" alt="leave">
-          </button>
-        </div>
-      </div>
-      <div class="vc-divider"></div>
-      <!-- Bottom: user info + mic -->
-      <div class="vc-user-row">
-        <div class="vc-user-avatar" id="vcBarAvatar">
-          <div class="vc-user-status"></div>
-        </div>
-        <div class="vc-user-info">
-          <div class="vc-user-name" id="vcBarName"></div>
-          <div class="vc-user-tag" id="vcBarTag"></div>
-        </div>
-        <div class="vc-user-controls">
-          <button class="vc-icon-btn" id="vcMuteBtn" title="Mute">
-            <img class="ri-sm" src="relinkicons/mutebutton.svg" alt="mute">
-          </button>
-          <button class="vc-icon-btn" id="vcSettingsBtn" title="User Settings" onclick="openProfileModal()">
-            <img class="ri-sm" src="relinkicons/settings.svg" alt="settings">
           </button>
         </div>
       </div>
@@ -814,7 +812,7 @@
 import { initializeApp }                              from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword,
          signInWithEmailAndPassword, signOut,
-         onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+         onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { getFirestore, collection, doc, addDoc,
          getDoc, getDocs, setDoc, updateDoc, deleteDoc,
          query, where, orderBy, limitToLast,
@@ -869,11 +867,42 @@ function usernameToEmail(u) { return u.toLowerCase() + '@relink.local'; }
 // Panel switching
 document.getElementById('switchToSignup').addEventListener('click', () => {
   document.getElementById('loginPanel').style.display = 'none';
+  document.getElementById('resetPanel').style.display = 'none';
   document.getElementById('signupPanel').style.display = 'block';
 });
 document.getElementById('switchToLogin').addEventListener('click', () => {
   document.getElementById('signupPanel').style.display = 'none';
+  document.getElementById('resetPanel').style.display = 'none';
   document.getElementById('loginPanel').style.display = 'block';
+});
+document.getElementById('forgotPasswordLink').addEventListener('click', () => {
+  document.getElementById('loginPanel').style.display = 'none';
+  document.getElementById('resetPanel').style.display = 'block';
+  document.getElementById('resetMsg').textContent = '';
+  document.getElementById('resetEmailInput').value = '';
+});
+document.getElementById('switchToLoginFromReset').addEventListener('click', () => {
+  document.getElementById('resetPanel').style.display = 'none';
+  document.getElementById('loginPanel').style.display = 'block';
+});
+document.getElementById('resetBtn').addEventListener('click', async () => {
+  const email = document.getElementById('resetEmailInput').value.trim();
+  const msg = document.getElementById('resetMsg');
+  msg.style.color = 'var(--text-muted)';
+  msg.textContent = '';
+  if (!email) { msg.style.color = '#e07070'; msg.textContent = 'Please enter your email.'; return; }
+  try {
+    await sendPasswordResetEmail(auth, email);
+    msg.style.color = '#3ba55c';
+    msg.textContent = '✅ Reset email sent! Check your inbox.';
+    document.getElementById('resetEmailInput').value = '';
+  } catch (e) {
+    msg.style.color = '#e07070';
+    if (e.code === 'auth/user-not-found') msg.textContent = 'No account found with that email.';
+    else if (e.code === 'auth/invalid-email') msg.textContent = 'Please enter a valid email address.';
+    else if (e.code === 'auth/too-many-requests') msg.textContent = 'Too many requests — try again later.';
+    else msg.textContent = e.message;
+  }
 });
 
 async function signup() {
@@ -1504,13 +1533,27 @@ function joinChannel(ch) {
     collection(db, 'servers', currentServer, 'channels', ch, 'messages'),
     orderBy('ts'), limitToLast(100)
   );
+  let initialLoad = true;
   unsubMessages = onSnapshot(msgsQ, snap => {
-    snap.docChanges().forEach(change => {
-      if (change.type === 'added') appendMessage(change.doc.data(), change.doc.id);
-      if (change.type === 'modified') updateMessageInDOM(change.doc.data(), change.doc.id);
-      if (change.type === 'removed') removeMessageFromDOM(change.doc.id);
-    });
-    messagesBox.scrollTop = messagesBox.scrollHeight;
+    if (initialLoad) {
+      // Batch all initial messages into a DocumentFragment — one DOM write
+      initialLoad = false;
+      const frag = document.createDocumentFragment();
+      const tempBox = document.createElement('div');
+      snap.docs.forEach(d => {
+        appendMessageToNode(tempBox, d.data(), d.id);
+      });
+      while (tempBox.firstChild) frag.appendChild(tempBox.firstChild);
+      messagesBox.appendChild(frag);
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    } else {
+      snap.docChanges().forEach(change => {
+        if (change.type === 'added') appendMessage(change.doc.data(), change.doc.id);
+        if (change.type === 'modified') updateMessageInDOM(change.doc.data(), change.doc.id);
+        if (change.type === 'removed') removeMessageFromDOM(change.doc.id);
+      });
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
   });
 
   updatePresence(currentServer, ch);
@@ -1595,7 +1638,12 @@ function isMentioned(text) {
   return text.includes('@' + myUsername) || text.includes('@everyone');
 }
 
-function appendMessage(m, msgId) {
+function appendMessageToNode(container, m, msgId) {
+  appendMessage(m, msgId, container);
+}
+
+function appendMessage(m, msgId, container) {
+  const target = container || messagesBox;
   if (document.getElementById('msg-' + msgId)) return;
 
   const div = document.createElement('div');
@@ -1702,7 +1750,7 @@ function appendMessage(m, msgId) {
   msgRow.appendChild(av);
   msgRow.appendChild(body);
   div.appendChild(msgRow);
-  messagesBox.appendChild(div);
+  target.appendChild(div);
 
   // Browser notification + badge for mentions
   if (isMentioned(m.text) && m.uid !== currentUser?.uid) {
@@ -2390,11 +2438,23 @@ function openDM(uid, username) {
 
   const id = dmId(currentUser.uid, uid);
   const dmQ = query(collection(db, 'dms', id, 'messages'), orderBy('ts'), limitToLast(100));
+  let dmInitialLoad = true;
   unsubMessages = onSnapshot(dmQ, snap => {
-    snap.docChanges().forEach(change => {
-      if (change.type === 'added') appendDM(change.doc.data());
-    });
-    messagesBox.scrollTop = messagesBox.scrollHeight;
+    if (dmInitialLoad) {
+      dmInitialLoad = false;
+      const frag = document.createDocumentFragment();
+      snap.docs.forEach(d => {
+        const div = buildDMMessageEl(d.data());
+        if (div) frag.appendChild(div);
+      });
+      messagesBox.appendChild(frag);
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    } else {
+      snap.docChanges().forEach(change => {
+        if (change.type === 'added') appendDM(change.doc.data());
+      });
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
   });
 
   // Listen for incoming call from this DM partner
@@ -2420,25 +2480,17 @@ async function sendDM(text, image) {
   await setDoc(doc(db, 'userDMs', currentDMUid), { [currentUser.uid]: myUsername }, { merge: true });
 }
 
-function appendDM(m) {
-  if (m.fromUid !== currentUser?.uid) {
-    sendBrowserNotif('DM from ' + (m.fromDisplayName || m.from), m.text || '📷 image');
-    addDmNotif();
-  }
+function buildDMMessageEl(m) {
   const div = document.createElement('div');
   div.className = 'message';
-
   const msgRow = document.createElement('div');
   msgRow.className = 'msg-row';
-
   const av = document.createElement('div');
   av.className = 'msg-avatar';
   if (m.fromAvatar) { av.innerHTML = `<img src="${m.fromAvatar}" alt="">`; }
   else { av.textContent = (m.fromDisplayName || m.from || '?')[0].toUpperCase(); }
-
   const body = document.createElement('div');
   body.className = 'msg-body';
-
   const meta = document.createElement('div');
   meta.className = 'msg-meta';
   const name = document.createElement('span');
@@ -2447,29 +2499,21 @@ function appendDM(m) {
   const time = document.createElement('span');
   time.className = 'msg-time';
   time.textContent = m.ts ? new Date(m.ts.toMillis()).toLocaleTimeString() : '';
-  meta.appendChild(name);
-  meta.appendChild(time);
+  meta.appendChild(name); meta.appendChild(time);
   body.appendChild(meta);
-
-  if (m.text) {
-    const txt = document.createElement('div');
-    txt.className = 'msg-text';
-    txt.appendChild(renderText(m.text));
-    body.appendChild(txt);
-  }
-  if (m.image) {
-    const img = document.createElement('img');
-    img.className = 'msg-img';
-    img.src = m.image;
-    img.alt = 'image';
-    img.onclick = () => openLightbox(m.image);
-    body.appendChild(img);
-  }
-
-  msgRow.appendChild(av);
-  msgRow.appendChild(body);
+  if (m.text) { const txt = document.createElement('div'); txt.className = 'msg-text'; txt.appendChild(renderText(m.text)); body.appendChild(txt); }
+  if (m.image) { const img = document.createElement('img'); img.className = 'msg-img'; img.src = m.image; img.alt = 'image'; img.onclick = () => openLightbox(m.image); body.appendChild(img); }
+  msgRow.appendChild(av); msgRow.appendChild(body);
   div.appendChild(msgRow);
-  messagesBox.appendChild(div);
+  return div;
+}
+
+function appendDM(m) {
+  if (m.fromUid !== currentUser?.uid) {
+    sendBrowserNotif('DM from ' + (m.fromDisplayName || m.from), m.text || '📷 image');
+    addDmNotif();
+  }
+  messagesBox.appendChild(buildDMMessageEl(m));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2546,6 +2590,7 @@ function addVcChannelItem(name) {
   channelList.appendChild(partEl);
 
   onSnapshot(collection(db, 'servers', currentServer, 'vc', name, 'participants'), snap => {
+    // Rebuild participant list UI
     partEl.innerHTML = '';
     snap.docs.forEach(d => {
       const p = d.data();
@@ -2581,6 +2626,21 @@ function addVcChannelItem(name) {
         if (label) label.innerHTML = '<img class="ri-sm" src="relinkicons/screenshare.svg" alt="share"> ' + (p.displayName || p.username);
       }
     });
+
+    // If WE are in this channel and have camera/screen, call any newly added peer
+    // whose UID is higher than ours (they won't call us since we have the lower UID)
+    if (currentVcChannel === name && localStream) {
+      snap.docChanges().forEach(change => {
+        if (change.type !== 'added') return;
+        const newUid = change.doc.id;
+        if (newUid === currentUser?.uid) return;          // not ourselves
+        if (peerConnections[newUid]) return;              // already connected
+        if (newUid <= currentUser?.uid) return;           // they will call us (lower UID calls higher)
+        // New peer with higher UID joined — call them so they get our camera/screen
+        callPeer(newUid, name);
+      });
+    }
+
     const activeUids = new Set(snap.docs.map(d => d.id));
     Object.keys(vcParticipantData).forEach(uid => {
       if (!activeUids.has(uid)) delete vcParticipantData[uid];
@@ -2625,13 +2685,6 @@ async function joinVoiceChannel(name) {
   document.getElementById('vcActiveBar').classList.add('visible');
   document.getElementById('vcActiveBarName').innerHTML = '<img class="ri-sm" src="relinkicons/voiceconnected.svg" alt="vc"> ' + name.replace(/^vc-/, '');
   document.getElementById('vcActiveBarServer').textContent = serverHeader.textContent;
-
-  // Populate user row
-  const vcBarAv = document.getElementById('vcBarAvatar');
-  if (myAvatar) vcBarAv.innerHTML = `<img src="${myAvatar}" alt=""><div class="vc-user-status"></div>`;
-  else { vcBarAv.textContent = (myDisplayName || myUsername || '?')[0].toUpperCase(); vcBarAv.insertAdjacentHTML('beforeend', '<div class="vc-user-status"></div>'); }
-  document.getElementById('vcBarName').textContent = myDisplayName || myUsername;
-  document.getElementById('vcBarTag').textContent = '@' + myUsername;
 
   // Fetch existing participants and call those with LOWER uid (prevents double-offer)
   const snap = await getDocs(collection(db, 'servers', currentServer, 'vc', name, 'participants'));
@@ -3056,7 +3109,7 @@ document.getElementById('vcShareBtn').addEventListener('click', async () => {
   } catch (e) { return; }
 
   isSharing = true;
-  document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon" style="opacity:.5"> Stop';
+  document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon" style="opacity:.5">';
   document.getElementById('vcShareBtn').classList.add('active');
 
   addShareTile(currentUser.uid, screenStream, true);
@@ -3104,7 +3157,7 @@ async function stopScreenShare(vcChannelOverride) {
   removeShareTile(currentUser.uid);
 
   const vcCh = vcChannelOverride || currentVcChannel;
-  if (!vcCh) { document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon"> Share'; document.getElementById('vcShareBtn').classList.remove('active'); return; }
+  if (!vcCh) { document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon">'; document.getElementById('vcShareBtn').classList.remove('active'); return; }
 
   for (const [uid, pc] of Object.entries(peerConnections)) {
     pc.getSenders().forEach(sender => {
@@ -3122,7 +3175,7 @@ async function stopScreenShare(vcChannelOverride) {
     } catch (_) {}
   }
 
-  document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon"> Share';
+  document.getElementById('vcShareBtn').innerHTML = '<img src="relinkicons/screenshare.svg" class="ri-icon">';
   document.getElementById('vcShareBtn').classList.remove('active');
 }
 
