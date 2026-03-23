@@ -822,7 +822,8 @@
 import { initializeApp }                              from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword,
          signInWithEmailAndPassword, signOut,
-         onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+         onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail,
+         verifyPasswordResetCode, confirmPasswordReset, applyActionCode } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { getFirestore, collection, doc, addDoc,
          getDoc, getDocs, setDoc, updateDoc, deleteDoc,
          query, where, orderBy, limitToLast,
@@ -902,7 +903,10 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   msg.textContent = '';
   if (!email) { msg.style.color = '#e07070'; msg.textContent = 'Please enter your email.'; return; }
   try {
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(auth, email, {
+      url: window.location.origin + window.location.pathname,
+      handleCodeInApp: false
+    });
     msg.style.color = '#3ba55c';
     msg.textContent = '✅ Reset email sent! Check your inbox.';
     document.getElementById('resetEmailInput').value = '';
@@ -914,6 +918,87 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
     else msg.textContent = e.message;
   }
 });
+
+// ── Handle Firebase email action links (password reset / verify) ──
+async function handleEmailAction() {
+  const params = new URLSearchParams(window.location.search);
+  const mode   = params.get('mode');
+  const code   = params.get('oobCode');
+  if (!mode || !code) return;
+
+  // Clean URL so refresh doesn't re-trigger
+  window.history.replaceState({}, '', window.location.pathname);
+
+  if (mode === 'resetPassword') {
+    try {
+      await verifyPasswordResetCode(auth, code);
+      showPasswordResetForm(code);
+    } catch (e) {
+      alert('This password reset link has expired or already been used. Please request a new one.');
+    }
+  } else if (mode === 'verifyEmail') {
+    try {
+      await applyActionCode(auth, code);
+      // Show login screen with success message
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('loginPanel').style.display = 'block';
+      document.getElementById('loginError').style.color = '#3ba55c';
+      document.getElementById('loginError').textContent = '✅ Email verified! You can now log in.';
+    } catch (e) {
+      alert('Verification link expired or already used. Please try logging in.');
+    }
+  }
+}
+
+function showPasswordResetForm(oobCode) {
+  // Hide everything, show login screen with new form
+  document.getElementById('loginPanel').style.display  = 'none';
+  document.getElementById('signupPanel').style.display = 'none';
+  document.getElementById('resetPanel').style.display  = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').style.display         = 'none';
+
+  const box = document.createElement('div');
+  box.className = 'login-box';
+  box.id = 'newPasswordPanel';
+  box.innerHTML = `
+    <h2>Set new password</h2>
+    <p class="login-sub">Choose a strong new password for your account.</p>
+    <div class="login-field">
+      <label>New Password <span>*</span></label>
+      <input id="newPwInput" type="password" placeholder="At least 6 characters">
+    </div>
+    <div class="login-field">
+      <label>Confirm Password <span>*</span></label>
+      <input id="newPwConfirm" type="password" placeholder="Repeat password">
+    </div>
+    <div id="newPwError" style="color:#e07070;font-size:13px;min-height:18px;text-align:center;margin-top:6px"></div>
+    <button class="login-submit" id="newPwBtn">Update Password</button>
+  `;
+  document.getElementById('loginScreen').appendChild(box);
+
+  document.getElementById('newPwBtn').addEventListener('click', async () => {
+    const pw1 = document.getElementById('newPwInput').value;
+    const pw2 = document.getElementById('newPwConfirm').value;
+    const err = document.getElementById('newPwError');
+    err.textContent = '';
+    if (!pw1 || pw1.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+    if (pw1 !== pw2) { err.textContent = "Passwords don't match."; return; }
+    try {
+      await confirmPasswordReset(auth, oobCode, pw1);
+      box.remove();
+      document.getElementById('loginPanel').style.display = 'block';
+      document.getElementById('loginError').style.color = '#3ba55c';
+      document.getElementById('loginError').textContent = '✅ Password updated! You can now log in.';
+    } catch (e) {
+      if (e.code === 'auth/expired-action-code') err.textContent = 'Link expired — please request a new reset email.';
+      else if (e.code === 'auth/weak-password') err.textContent = 'Password must be at least 6 characters.';
+      else err.textContent = e.message;
+    }
+  });
+}
+
+handleEmailAction(); // run on page load
 
 async function signup() {
   const email = document.getElementById('signupEmailInput').value.trim();
