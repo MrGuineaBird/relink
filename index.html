@@ -903,10 +903,7 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   msg.textContent = '';
   if (!email) { msg.style.color = '#e07070'; msg.textContent = 'Please enter your email.'; return; }
   try {
-    await sendPasswordResetEmail(auth, email, {
-      url: window.location.origin + window.location.pathname,
-      handleCodeInApp: false
-    });
+    await sendPasswordResetEmail(auth, email);
     msg.style.color = '#3ba55c';
     msg.textContent = '✅ Reset email sent! Check your inbox.';
     document.getElementById('resetEmailInput').value = '';
