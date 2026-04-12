@@ -826,7 +826,7 @@
 //  Set BACKEND_URL to your Render deployment URL before going live.
 // ══════════════════════════════════════════════════════════════════
 
-const BACKEND_URL = 'https://relinkbackend.kyklos.online';
+const BACKEND_URL = window.RELINK_BACKEND || 'https://relinkbackend.kyklos.online';
 
 // ── API helpers ────────────────────────────────────────────────────
 function getToken() { return localStorage.getItem('relink_token'); }
@@ -894,7 +894,12 @@ function connectSocket() {
   socket.on('message:deleted',   e  => removeMessageFromDOM(e.msgId));
   socket.on('message:reactions', e  => {
     const row = document.getElementById('reactions-' + e.msgId);
-    if (row) renderReactions(row, e.reactions, e.msgId);
+    if (!row) return;
+    // Preserve scroll position — reaction updates must not jump the chat
+    const atBottom = messagesBox.scrollHeight - messagesBox.scrollTop - messagesBox.clientHeight < 2;
+    const prevScroll = messagesBox.scrollTop;
+    renderReactions(row, e.reactions, e.msgId);
+    if (!atBottom) messagesBox.scrollTop = prevScroll;
   });
 
   // Presence
@@ -1633,10 +1638,11 @@ function isMentioned(text) {
 }
 
 function handleNewMessage(m) {
-  // Only show if we're in the right channel
   if (!inDM && m.server_id === currentServer && m.channel_id === currentChannelId) {
+    // Only auto-scroll if already at (or near) the bottom
+    const atBottom = messagesBox.scrollHeight - messagesBox.scrollTop - messagesBox.clientHeight < 80;
     appendMessage(m, m.id);
-    messagesBox.scrollTop = messagesBox.scrollHeight;
+    if (atBottom) messagesBox.scrollTop = messagesBox.scrollHeight;
     if (isMentioned(m.text) && m.uid !== currentUser?.uid) {
       sendBrowserNotif(m.display_name || m.username, m.text);
     }
@@ -1936,10 +1942,29 @@ function updateDmBadge() {
 async function requestNotifPermission() {
   if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
 }
+let _tabNotifCount = 0;
+let _origTitle = document.title;
+
+function flashTabTitle(fromName) {
+  _tabNotifCount++;
+  document.title = `(${_tabNotifCount}) 🔔 RELINK`;
+}
+
+// Clear tab badge when user focuses the window
+window.addEventListener('focus', () => {
+  _tabNotifCount = 0;
+  document.title = _origTitle;
+});
+
 function sendBrowserNotif(fromName, text) {
+  // Always flash the tab title for mentions, even when focused
+  flashTabTitle(fromName);
+
+  // Also send a system notification when window is not focused
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (document.hasFocus()) return;
-  new Notification('RELINK — ' + fromName, { body: text });
+  const n = new Notification('RELINK — ' + fromName, { body: text });
+  n.onclick = () => { window.focus(); n.close(); };
 }
 
 // Add label to right panel if not present
@@ -2506,12 +2531,7 @@ function handleVcPeerMuted({ uid, muted }) {
 }
 
 async function handleVcSignal({ from, signal }) {
-  // Make sure offerer is in our UI even if we somehow missed their join event
-  if (signal.type === 'offer' && !vcParticipantData[from]) {
-    vcParticipantData[from] = { uid: from, username: from, displayName: from, avatar: null, muted: false };
-    upsertVcParticipantRow(from, vcParticipantData[from]);
-  }
-  if (signal.type === 'offer')  await handleOffer(from, signal);
+  if (signal.type === 'offer')       await handleOffer(from, signal);
   else if (signal.type === 'answer') await handleAnswer(from, signal);
   else if (signal.type === 'ice')    await handleIce(from, signal);
 }
@@ -2539,6 +2559,7 @@ async function handleOffer(from, signal) {
 
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
   if (isCameraOn && cameraStream) cameraStream.getTracks().forEach(t => pc.addTrack(t, cameraStream));
+  if (isSharing && screenStream)  screenStream.getTracks().forEach(t => pc.addTrack(t, screenStream));
 
   await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
 
