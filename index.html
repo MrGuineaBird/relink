@@ -1009,7 +1009,8 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   try {
     await api('/api/auth/forgot-password', { method: 'POST', body: { email } });
     msg.style.color = '#3ba55c';
-    msg.textContent = '✅ If an account exists, a reset email has been sent.';
+    msg.textContent = '✅ Reset email sent! Check your inbox.';
+    document.getElementById('resetEmailInput').value = '';
   } catch (e) {
     msg.style.color = '#e07070';
     msg.textContent = e.message;
@@ -1023,9 +1024,10 @@ async function signup() {
   const err   = document.getElementById('signupError');
   err.textContent = '';
   try {
-    const { token, user } = await api('/api/auth/register', { method: 'POST', body: { email, username: u, password: p } });
-    setToken(token);
-    afterLogin(user);
+    const data = await api('/api/auth/register', { method: 'POST', body: { email, username: u, password: p } });
+    if (data.needsVerification) {
+      showVerifyScreen(email);
+    }
   } catch (e) {
     err.textContent = e.message;
   }
@@ -1042,6 +1044,11 @@ async function login() {
     setToken(token);
     afterLogin(user);
   } catch (e) {
+    if (e.status === 403) {
+      // Account not verified yet
+      showVerifyScreen(u.includes('@') ? u : '');
+      return;
+    }
     err.textContent = e.message;
   }
 }
@@ -1069,16 +1076,62 @@ async function logout() {
   if (socket) { socket.disconnect(); socket = null; }
   currentUser = null;
   document.getElementById('app').style.display = 'none';
+  document.getElementById('verifyScreen').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('loginPanel').style.display = 'block';
   document.getElementById('signupPanel').style.display = 'none';
   document.getElementById('resetPanel').style.display = 'none';
 }
 
+let _pendingVerifyEmail = '';
+
+function showVerifyScreen(email) {
+  _pendingVerifyEmail = email;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('verifyScreen').style.display = 'flex';
+  document.getElementById('verifyEmailAddr').textContent = email || 'your email address';
+}
+
 document.getElementById('loginBtn').addEventListener('click', login);
 document.getElementById('signupBtn').addEventListener('click', signup);
 document.getElementById('usernameInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 document.getElementById('passwordInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+// ── Verify screen buttons ──────────────────────────────────────────
+document.getElementById('verifyCheckBtn').addEventListener('click', () => {
+  // User says they clicked the link — send them back to login
+  const msg = document.getElementById('verifyMsg');
+  msg.style.color = '#3ba55c';
+  msg.textContent = 'Great! Try logging in now.';
+  setTimeout(() => {
+    document.getElementById('verifyScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginPanel').style.display = 'block';
+    document.getElementById('signupPanel').style.display = 'none';
+    msg.textContent = '';
+  }, 1200);
+});
+
+document.getElementById('verifyResendBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('verifyMsg');
+  msg.style.color = 'var(--text-muted)';
+  msg.textContent = 'Sending…';
+  try {
+    await api('/api/auth/resend-verification', { method: 'POST', body: { email: _pendingVerifyEmail } });
+    msg.style.color = '#3ba55c';
+    msg.textContent = '✅ Verification email resent! Check your inbox.';
+    setTimeout(() => { msg.textContent = ''; }, 5000);
+  } catch (e) {
+    msg.style.color = '#e07070';
+    msg.textContent = 'Failed to resend. Try again later.';
+  }
+});
+
+document.getElementById('verifyLogoutBtn').addEventListener('click', () => {
+  document.getElementById('verifyScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginPanel').style.display = 'block';
+});
 
 // Auto-login from stored token
 (async () => {
