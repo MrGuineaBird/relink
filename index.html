@@ -838,67 +838,6 @@
 
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
-<!-- Firebase Email Verification -->
-<script type="module">
-  import { initializeApp }                                  from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-           sendEmailVerification, sendPasswordResetEmail, signOut, reload }
-    from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
-
-  const firebaseConfig = {
-    apiKey:            "AIzaSyAoZ65rB3Eipqf2D9jsfT-7u0JM3D_qYys",
-    authDomain:        "relink-verification.firebaseapp.com",
-    projectId:         "relink-verification",
-    storageBucket:     "relink-verification.firebasestorage.app",
-    messagingSenderId: "47032891095",
-    appId:             "1:47032891095:web:b22ce1378f9bbc7027a292"
-  };
-
-  const app  = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-
-  // Expose helpers to the non-module main script
-  window._fb = {
-    // Register: create Firebase user + send verification email
-    async createUser(email, password) {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await sendEmailVerification(cred.user);
-      return cred.user;
-    },
-
-    // Login: sign in and return { emailVerified }
-    async signIn(email, password) {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      return cred.user;
-    },
-
-    // Reload Firebase user and return latest emailVerified state
-    async checkVerified() {
-      const u = auth.currentUser;
-      if (!u) return false;
-      await reload(u);
-      return auth.currentUser.emailVerified;
-    },
-
-    // Resend verification email to the currently signed-in (unverified) user
-    async resendVerification() {
-      const u = auth.currentUser;
-      if (!u) throw new Error('No signed-in user.');
-      await sendEmailVerification(u);
-    },
-
-    // Send password reset email (Firebase handles the full flow)
-    async sendPasswordReset(email) {
-      await sendPasswordResetEmail(auth, email);
-    },
-
-    async signOut() {
-      await signOut(auth);
-    }
-  };
-</script>
-
 <script>
 // ══════════════════════════════════════════════════════════════════
 //  RELINK — Frontend (Socket.io + REST backend, no Firebase)
@@ -1325,11 +1264,7 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   msg.style.color = 'var(--text-muted)';
   if (!email) { msg.style.color = '#e07070'; msg.textContent = 'Please enter your email.'; return; }
   try {
-    if (window._fb) {
-      await window._fb.sendPasswordReset(email);
-    } else {
-      await api('/api/auth/forgot-password', { method: 'POST', body: { email } });
-    }
+    await api('/api/auth/forgot-password', { method: 'POST', body: { email } });
     msg.style.color = '#3ba55c';
     msg.textContent = '✅ If an account exists, a reset email has been sent.';
   } catch (e) {
@@ -1337,17 +1272,6 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
     msg.textContent = e.message;
   }
 });
-
-// Pending user stored while waiting for email verification
-let _pendingVerifyUser  = null;
-let _pendingVerifyToken = null;
-
-function showVerifyScreen(email) {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('verifyScreen').style.display = 'flex';
-  document.getElementById('verifyEmailAddr').textContent = email;
-  document.getElementById('verifyMsg').textContent = '';
-}
 
 async function signup() {
   const email = document.getElementById('signupEmailInput').value.trim();
@@ -1367,26 +1291,9 @@ async function signup() {
   startSignupCooldown();
   document.getElementById('signupBtn').disabled = true;
   try {
-    // 1. Register on the backend first (checks username/email uniqueness)
     const { token, user } = await api('/api/auth/register', { method: 'POST', body: { email, username: u, password: p } });
-
-    // 2. Create Firebase user and send verification email
-    if (window._fb) {
-      try { await window._fb.createUser(email, p); } catch (fbErr) {
-        // Firebase user may already exist (e.g. retry after partial failure) — ignore auth/email-already-in-use
-        if (!fbErr.code || fbErr.code !== 'auth/email-already-in-use') throw new Error('Email send failed: ' + fbErr.message);
-        await window._fb.signIn(email, p);
-        await window._fb.resendVerification();
-      }
-      // 3. Hold the session until email is verified
-      _pendingVerifyUser  = user;
-      _pendingVerifyToken = token;
-      showVerifyScreen(email);
-    } else {
-      // Firebase unavailable — fall through (dev mode)
-      setToken(token);
-      afterLogin(user);
-    }
+    setToken(token);
+    afterLogin(user);
   } catch (e) {
     err.textContent = e.message;
   } finally {
@@ -1403,19 +1310,6 @@ async function login() {
   if (!u || !p) { err.textContent = 'Please fill in all fields.'; return; }
   try {
     const { token, user } = await api('/api/auth/login', { method: 'POST', body: { login: u, password: p } });
-
-    if (window._fb) {
-      // Sign in to Firebase using the user's email (returned by backend)
-      const fbUser = await window._fb.signIn(user.email, p);
-      if (!fbUser.emailVerified) {
-        // Email not yet verified — hold and show verify screen
-        _pendingVerifyUser  = user;
-        _pendingVerifyToken = token;
-        showVerifyScreen(user.email);
-        return;
-      }
-    }
-
     setToken(token);
     afterLogin(user);
   } catch (e) {
@@ -1464,52 +1358,6 @@ document.getElementById('loginBtn').addEventListener('click', login);
 document.getElementById('signupBtn').addEventListener('click', signup);
 document.getElementById('usernameInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 document.getElementById('passwordInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-
-// ── Verify screen ──────────────────────────────────────────────────
-document.getElementById('verifyCheckBtn').addEventListener('click', async () => {
-  const msg = document.getElementById('verifyMsg');
-  msg.style.color = 'var(--text-muted)';
-  msg.textContent = 'Checking…';
-  try {
-    const verified = window._fb ? await window._fb.checkVerified() : true;
-    if (verified) {
-      document.getElementById('verifyScreen').style.display = 'none';
-      setToken(_pendingVerifyToken);
-      afterLogin(_pendingVerifyUser);
-      _pendingVerifyUser = null;
-      _pendingVerifyToken = null;
-    } else {
-      msg.style.color = '#e07070';
-      msg.textContent = "Email not verified yet. Check your inbox (and spam folder) and click the link, then try again.";
-    }
-  } catch (e) {
-    msg.style.color = '#e07070';
-    msg.textContent = e.message;
-  }
-});
-
-document.getElementById('verifyResendBtn').addEventListener('click', async () => {
-  const msg = document.getElementById('verifyMsg');
-  try {
-    if (window._fb) await window._fb.resendVerification();
-    msg.style.color = '#3ba55c';
-    msg.textContent = '✅ Verification email resent!';
-  } catch (e) {
-    msg.style.color = '#e07070';
-    msg.textContent = e.message;
-  }
-});
-
-document.getElementById('verifyLogoutBtn').addEventListener('click', async () => {
-  _pendingVerifyUser = null;
-  _pendingVerifyToken = null;
-  if (window._fb) await window._fb.signOut().catch(() => {});
-  document.getElementById('verifyScreen').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('loginPanel').style.display = 'block';
-  document.getElementById('signupPanel').style.display = 'none';
-  document.getElementById('resetPanel').style.display = 'none';
-});
 
 // Auto-login from stored token
 (async () => {
@@ -1722,7 +1570,7 @@ async function leaveCurrentServer(serverId) {
   if (typeof currentVcChannel !== 'undefined' && currentVcChannel && currentServer === serverId) {
     await leaveVoiceChannel();
   }
-  await api('/api/servers/' + serverId, { method: 'DELETE' });
+  await api('/api/servers/' + serverId + '/leave', { method: 'DELETE' });
   if (currentServer === serverId) resetServerView();
   await loadMyServers();
 }
