@@ -940,7 +940,21 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: res.status, unverified: data.unverified, email: data.email });
+  if (!res.ok) {
+    const error = Object.assign(new Error(data.error || 'Request failed'), { status: res.status, unverified: data.unverified, email: data.email });
+    if (res.status === 403 && /verify your email/i.test(error.message || '')) {
+      const fallbackUser = currentUser || (pendingVerifyEmail ? { email: pendingVerifyEmail, username: myUsername || '', email_verified: false } : null);
+      if (fallbackUser) {
+        fallbackUser.email_verified = false;
+        if (socket) {
+          socket.disconnect();
+          socket = null;
+        }
+        showVerifyScreenForUser(fallbackUser, error.message, 'error');
+      }
+    }
+    throw error;
+  }
   return data;
 }
 
@@ -1352,6 +1366,29 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
 
 let pendingVerifyEmail = null;
 
+async function resumeExistingVerificationFlow(email, password, message) {
+  try {
+    const firebaseUser = await signInFirebase(email, password);
+    const { token, user } = await api('/api/auth/login', {
+      method: 'POST',
+      body: { login: email, password }
+    });
+    setToken(token);
+    await afterLogin(user);
+    if (user.email_verified) {
+      return true;
+    }
+    if (firebaseUser?.emailVerified && (!user.email || !firebaseUser.email || firebaseUser.email.toLowerCase() === user.email.toLowerCase())) {
+      await finalizeEmailVerification(false);
+    } else {
+      setVerifyMessage(message || 'Your account already exists but is still waiting for email verification.', 'info');
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function signup() {
   const email = document.getElementById('signupEmailInput').value.trim();
   const u     = clampText(document.getElementById('signupUsernameInput').value.trim(), APP_LIMITS.usernameMax).toLowerCase();
@@ -1390,6 +1427,14 @@ async function signup() {
     }
     await afterLogin(user);
   } catch (e) {
+    if (!createdFirebaseUser && e?.code === 'auth/email-already-in-use') {
+      const resumed = await resumeExistingVerificationFlow(
+        email,
+        p,
+        'This email is already registered but not verified yet. Check your inbox, then continue here.'
+      );
+      if (resumed) return;
+    }
     if (createdFirebaseUser && firebase) {
       try { await firebase.deleteUser(createdFirebaseUser); } catch {}
       try { await firebase.signOut(firebase.auth); } catch {}
