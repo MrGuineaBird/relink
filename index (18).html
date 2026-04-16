@@ -856,7 +856,9 @@
 //  Set BACKEND_URL to your Render deployment URL before going live.
 // ══════════════════════════════════════════════════════════════════
 
+const RELINK_FRONTEND_BUILD = 'verification-fix-2026-04-16b';
 const BACKEND_URL = window.RELINK_BACKEND || 'https://relinkbackend.kyklos.online';
+console.info('[relink]', RELINK_FRONTEND_BUILD, BACKEND_URL);
 const RELINK_FIREBASE_CONFIG = window.RELINK_FIREBASE_CONFIG || {
   apiKey: 'AIzaSyAoZ65rB3Eipqf2D9jsfT-7u0JM3D_qYys',
   authDomain: 'relink-verification.firebaseapp.com',
@@ -1214,6 +1216,7 @@ document.addEventListener('visibilitychange', () => {
 let socket = null;
 
 function connectSocket() {
+  if (!currentUser?.email_verified) return;
   if (socket) socket.disconnect();
   socket = io(BACKEND_URL, { auth: { token: getToken() } });
 
@@ -2141,7 +2144,7 @@ document.getElementById('editDeleteBtn').addEventListener('click', async () => {
 });
 
 async function loadMyServers() {
-  if (!currentUser) return;
+  if (!currentUser?.email_verified) return;
   const servers = await api('/api/servers');
   let iconsContainer = document.getElementById('serverIconsList');
   if (!iconsContainer) {
@@ -2791,6 +2794,7 @@ function sendBrowserNotif(fromName, text) {
 function dmIdLocal(uid1, uid2) { return [uid1, uid2].sort().join('_'); }
 
 async function loadDMList() {
+  if (!currentUser?.email_verified) return;
   if (typeof currentVcChannel !== 'undefined' && currentVcChannel) await leaveVoiceChannel();
   if (socket) socket.emit('leave:channel');
   inDM = true;
