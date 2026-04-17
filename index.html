@@ -544,6 +544,32 @@
     .giphy-load-more { padding:16px; text-align:center }
     .giphy-load-more button { padding:8px 24px; border-radius:8px; border:none; background:var(--accent); color:white; cursor:pointer; font-size:14px; transition:background .2s }
     .giphy-load-more button:hover { background:var(--accent-hover) }
+
+    /* Message input buttons */
+    .search-btn, .giphy-btn {
+      background: var(--panel);
+      border: none;
+      border-radius: 6px;
+      padding: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 8px;
+      transition: background 0.2s;
+      min-width: 40px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .search-btn:hover, .giphy-btn:hover {
+      background: var(--accent-soft);
+    }
+    
+    .search-btn:active, .giphy-btn:active {
+      background: var(--accent);
+      transform: scale(0.95);
+    }
   </style>
 </head>
 <body>
@@ -730,6 +756,8 @@
       </div>
       <div class="composer-row">
         <input type="file" id="imgFileInput" accept="image/*" style="display:none">
+        <button class="search-btn" id="searchBtn" title="Search messages (Ctrl+F)">🔍</button>
+        <button class="giphy-btn" id="giphyBtn" title="Add GIF">🎭</button>
         <button class="upload-btn" id="uploadImgBtn" title="Upload image">+</button>
         <input id="inputMsg" class="input" placeholder="Message…" />
         <button class="btn" id="sendBtn">Send</button>
@@ -2337,7 +2365,7 @@ function renderGiphyResults(gifs, append = false) {
 }
 
 function sendGiphy(gif) {
-  const messageInput = document.getElementById('messageInput');
+  const messageInput = document.getElementById('inputMsg');
   const currentText = messageInput.value.trim();
   
   // Add GIF URL to message
@@ -2463,24 +2491,22 @@ document.querySelectorAll('.giphy-tab').forEach(tab => {
   });
 });
 
-// Add Giphy button to message input area
-function addGiphyButton() {
-  const messageControls = document.querySelector('.message-controls');
-  if (messageControls && !messageControls.querySelector('.giphy-btn')) {
-    const giphyBtn = document.createElement('button');
-    giphyBtn.className = 'giphy-btn';
-    giphyBtn.innerHTML = '🎭';
-    giphyBtn.title = 'Add GIF';
-    giphyBtn.style.cssText = `
-      background: var(--panel);
-      border: none;
-      border-radius: 6px;
-      padding: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      margin-left: 8px;
-      transition: background 0.2s;
-    `;
+// Add event listeners to existing buttons
+function addMessageButtonListeners() {
+  const searchBtn = document.getElementById('searchBtn');
+  const giphyBtn = document.getElementById('giphyBtn');
+  
+  if (searchBtn) {
+    searchBtn.addEventListener('click', openSearchModal);
+    searchBtn.addEventListener('mouseenter', () => {
+      searchBtn.style.background = 'var(--accent-soft)';
+    });
+    searchBtn.addEventListener('mouseleave', () => {
+      searchBtn.style.background = 'var(--panel)';
+    });
+  }
+  
+  if (giphyBtn) {
     giphyBtn.addEventListener('click', openGiphyModal);
     giphyBtn.addEventListener('mouseenter', () => {
       giphyBtn.style.background = 'var(--accent-soft)';
@@ -2488,13 +2514,39 @@ function addGiphyButton() {
     giphyBtn.addEventListener('mouseleave', () => {
       giphyBtn.style.background = 'var(--panel)';
     });
-    
-    messageControls.appendChild(giphyBtn);
   }
 }
 
-// Initialize Giphy button when page loads
-setTimeout(addGiphyButton, 1000);
+// Initialize message button listeners when page loads
+setTimeout(addMessageButtonListeners, 1000);
+
+// Message formatting function
+function formatMessageText(text) {
+  if (!text) return '';
+  
+  // Escape HTML first
+  let formatted = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  
+  // Bold: **text** -> <strong>text</strong>
+  formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  
+  // Italic: *text* -> <em>text</em>
+  formatted = formatted.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  
+  // Code: `code` -> <code>code</code>
+  formatted = formatted.replace(/`(.+?)`/g, '<code style="background:rgba(255,255,255,0.1);padding:2px 4px;border-radius:3px;font-family:monospace">$1</code>');
+  
+  // Links: http://example.com -> <a href="http://example.com" target="_blank">http://example.com</a>
+  formatted = formatted.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:var(--accent-hover)">$1</a>');
+  
+  // Mentions: @username -> <span class="mention">@username</span>
+  formatted = formatted.replace(/@(\w+)/g, '<span class="mention" style="color:var(--accent);font-weight:600">@$1</span>');
+  
+  return formatted;
+}
 
 // Auto-login from stored token OR URL params from email links
 (async () => {
