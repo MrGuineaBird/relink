@@ -3322,8 +3322,9 @@ function renderText(text) {
 function extractGiphyUrls(text) {
   if (!text) return [];
   const urls = [];
-  // Pattern 1: media.giphy.com/media/{ID}/giphy.gif (or .mp4, webp, etc.)
-  const mediaRe = /https?:\/\/media[0-9]*\.giphy\.com\/media\/([a-zA-Z0-9_-]+)\/giphy(?:-[a-z0-9]+)?\.gif/gi;
+  // Pattern 1: media.giphy.com/media/.../{ID}/giphy.gif
+  // Handles both old format (/media/{ID}/giphy.gif) and new format (/media/{params}/{ID}/giphy.gif)
+  const mediaRe = /https?:\/\/media[0-9]*\.giphy\.com\/media\/(?:[a-zA-Z0-9_.%-]+\/)?([a-zA-Z0-9_-]+)\/giphy(?:-[a-z0-9]+)?\.gif/gi;
   let match;
   while ((match = mediaRe.exec(text)) !== null) {
     urls.push({ url: match[0], gifUrl: `https://media.giphy.com/media/${match[1]}/giphy.gif` });
