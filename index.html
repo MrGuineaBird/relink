@@ -3322,27 +3322,35 @@ function renderText(text) {
 function extractGiphyUrls(text) {
   if (!text) return [];
   const urls = [];
+  const seen = new Set();
+
   // Pattern 1: media.giphy.com/media/.../{ID}/giphy.gif
-  // Handles both old format (/media/{ID}/giphy.gif) and new format (/media/{params}/{ID}/giphy.gif)
-  const mediaRe = /https?:\/\/media[0-9]*\.giphy\.com\/media\/(?:[a-zA-Z0-9_.%-]+\/)?([a-zA-Z0-9_-]+)\/giphy(?:-[a-z0-9]+)?\.gif/gi;
+  // Handles old format (/media/{ID}/) and new format (/media/{params}/{ID}/)
+  const mediaRe = /https?:\/\/media[0-9]*\.giphy\.com\/media\/(?:[a-zA-Z0-9_.%+-]+\/)?([a-zA-Z0-9_-]+)\/giphy(?:-[a-z0-9]+)?\.gif/gi;
   let match;
   while ((match = mediaRe.exec(text)) !== null) {
-    urls.push({ url: match[0], gifUrl: `https://media.giphy.com/media/${match[1]}/giphy.gif` });
-  }
-  // Pattern 2: giphy.com/gifs/{slug}-{ID} or giphy.com/gifs/{ID}
-  const pageRe = /https?:\/\/giphy\.com\/gifs\/[^\s]*?-([a-zA-Z0-9_-]{10,})(?:\/|\?[^\s]*)?(?=[\s]|$)/gi;
-  while ((match = pageRe.exec(text)) !== null) {
     const id = match[1];
-    // Avoid duplicates from media URLs already matched
-    if (!urls.some(u => u.gifUrl.includes(id))) {
+    if (!seen.has(id)) { seen.add(id); urls.push({ url: match[0], gifUrl: `https://media.giphy.com/media/${id}/giphy.gif` }); }
+  }
+
+  // Pattern 2: giphy.com page URLs — /gifs/, /gif/, /clips/ with optional www
+  // ID is the last path segment, or the part after the last hyphen in that segment
+  const pageRe = /https?:\/\/(?:www\.)?giphy\.com\/(?:gifs|gif|clips)\/([^\s?]+)/gi;
+  while ((match = pageRe.exec(text)) !== null) {
+    const lastSegment = match[1].split('/').pop();
+    const id = lastSegment.includes('-') ? lastSegment.split('-').pop() : lastSegment;
+    if (id && id.length >= 6 && /^[a-zA-Z0-9_-]+$/.test(id) && !seen.has(id)) {
+      seen.add(id);
       urls.push({ url: match[0], gifUrl: `https://media.giphy.com/media/${id}/giphy.gif` });
     }
   }
+
   // Pattern 3: gph.is short links
   const shortRe = /https?:\/\/gph\.is\/[a-zA-Z0-9_-]+/gi;
   while ((match = shortRe.exec(text)) !== null) {
     urls.push({ url: match[0], gifUrl: null, shortUrl: match[0] });
   }
+
   return urls;
 }
 
