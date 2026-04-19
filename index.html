@@ -69,11 +69,11 @@
     .msg-text { font-size:14px; color:var(--text); word-break:break-word; line-height:1.5 }
     .msg-img { max-width:360px; max-height:300px; border-radius:8px; margin-top:6px; display:block; cursor:zoom-in }
 
-    /* Giphy embed */
-    .giphy-embed { margin-top:8px; border-left:4px solid var(--accent); border-radius:4px; background:var(--panel); padding:10px 12px 8px; max-width:400px; overflow:hidden }
-    .giphy-embed-label { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px }
-    .giphy-embed-label svg { width:16px; height:16px }
-    .giphy-embed img { max-width:100%; max-height:300px; border-radius:4px; display:block; cursor:zoom-in }
+    /* GIF embed */
+    .gif-embed { margin-top:8px; border-left:4px solid var(--accent); border-radius:4px; background:var(--panel); padding:10px 12px 8px; max-width:400px; overflow:hidden }
+    .gif-embed-label { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px }
+    .gif-embed-label svg { width:16px; height:16px }
+    .gif-embed img { max-width:100%; max-height:300px; border-radius:4px; display:block; cursor:zoom-in }
     .msg-img:hover { opacity:.9 }
 
     /* Image lightbox */
@@ -3318,19 +3318,19 @@ function renderText(text) {
   return frag;
 }
 
-// Extract direct GIF URLs from Giphy links in text
-function extractGiphyUrls(text) {
+// Extract embeddable GIF URLs from message text
+// Handles: direct .gif URLs (any host), Giphy page URLs, gph.is short links
+function extractGifUrls(text) {
   if (!text) return [];
   const urls = [];
   const seen = new Set();
 
-  // Pattern 1: media.giphy.com/media/.../{ID}/giphy.gif
-  // Handles old format (/media/{ID}/) and new format (/media/{params}/{ID}/)
-  const mediaRe = /https?:\/\/media[0-9]*\.giphy\.com\/media\/(?:[a-zA-Z0-9_.%+-]+\/)?([a-zA-Z0-9_-]+)\/giphy(?:-[a-z0-9]+)?\.gif/gi;
+  // Pattern 1: Any direct URL ending in .gif, .gifv, or .webm (Giphy, Tenor, imgur, etc.)
+  const directRe = /https?:\/\/[^\s]+\.(?:gif|gifv|webm)(?:\?[^\s]*)?/gi;
   let match;
-  while ((match = mediaRe.exec(text)) !== null) {
-    const id = match[1];
-    if (!seen.has(id)) { seen.add(id); urls.push({ url: match[0], gifUrl: `https://media.giphy.com/media/${id}/giphy.gif` }); }
+  while ((match = directRe.exec(text)) !== null) {
+    const url = match[0];
+    if (!seen.has(url)) { seen.add(url); urls.push({ url, src: url, type: 'direct' }); }
   }
 
   // Pattern 2: giphy.com page URLs — /gifs/, /gif/, /clips/ with optional www
@@ -3341,39 +3341,42 @@ function extractGiphyUrls(text) {
     const id = lastSegment.includes('-') ? lastSegment.split('-').pop() : lastSegment;
     if (id && id.length >= 6 && /^[a-zA-Z0-9_-]+$/.test(id) && !seen.has(id)) {
       seen.add(id);
-      urls.push({ url: match[0], gifUrl: `https://media.giphy.com/media/${id}/giphy.gif` });
+      urls.push({ url: match[0], src: `https://media.giphy.com/media/${id}/giphy.gif`, type: 'giphy' });
     }
   }
 
   // Pattern 3: gph.is short links
   const shortRe = /https?:\/\/gph\.is\/[a-zA-Z0-9_-]+/gi;
   while ((match = shortRe.exec(text)) !== null) {
-    urls.push({ url: match[0], gifUrl: null, shortUrl: match[0] });
+    urls.push({ url: match[0], src: null, type: 'short', shortUrl: match[0] });
   }
 
   return urls;
 }
 
-function createGiphyEmbed(gifUrl, shortUrl) {
+function createGifEmbed(gifInfo) {
   const embed = document.createElement('div');
-  embed.className = 'giphy-embed';
+  embed.className = 'gif-embed';
   const label = document.createElement('div');
-  label.className = 'giphy-embed-label';
-  label.innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="20" height="20" rx="3" stroke="currentColor" stroke-width="2"/><text x="7" y="17" font-size="12" font-weight="bold" fill="currentColor">GIF</text></svg> Giphy';
+  label.className = 'gif-embed-label';
+  const src = gifInfo.src;
+  // Determine label based on source
+  let labelText = 'GIF';
+  if (gifInfo.type === 'giphy' || (src && /giphy\.com/i.test(src))) labelText = 'Giphy';
+  else if (src && /tenor\.com/i.test(src)) labelText = 'Tenor';
+  else if (src && /imgur\.com/i.test(src)) labelText = 'Imgur';
+  label.innerHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="20" height="20" rx="3" stroke="currentColor" stroke-width="2"/><text x="7" y="17" font-size="12" font-weight="bold" fill="currentColor">GIF</text></svg> ${labelText}`;
   embed.appendChild(label);
-  const img = document.createElement('img');
-  if (gifUrl) {
-    img.src = gifUrl;
-    img.alt = 'Giphy GIF';
+  if (src) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = 'GIF';
     img.loading = 'lazy';
-    img.onclick = () => openLightbox(gifUrl);
+    img.onclick = () => openLightbox(src);
     embed.appendChild(img);
-  } else if (shortUrl) {
-    // For short URLs, we can't resolve server-side, so try loading via oEmbed-like approach
-    // We'll try the common pattern: resolve short URL by fetching the redirect
-    // Since we can't fetch cross-origin, we'll just show a link
+  } else if (gifInfo.shortUrl) {
     const a = document.createElement('a');
-    a.href = shortUrl; a.target = '_blank'; a.style.color = 'var(--accent-hover)'; a.textContent = shortUrl;
+    a.href = gifInfo.shortUrl; a.target = '_blank'; a.style.color = 'var(--accent-hover)'; a.textContent = gifInfo.shortUrl;
     embed.appendChild(a);
   }
   return embed;
@@ -3467,12 +3470,12 @@ function appendMessage(m, msgId, container) {
     body.appendChild(img);
   }
 
-  // Giphy auto-embed
+  // Auto-embed GIF URLs
   if (m.text) {
-    const giphyUrls = extractGiphyUrls(m.text);
-    giphyUrls.forEach(g => {
-      const embed = createGiphyEmbed(g.gifUrl, g.shortUrl);
-      embed.dataset.giphyEmbed = '1';
+    const gifUrls = extractGifUrls(m.text);
+    gifUrls.forEach(g => {
+      const embed = createGifEmbed(g);
+      embed.dataset.gifEmbed = '1';
       body.appendChild(embed);
     });
   }
@@ -3510,18 +3513,17 @@ function makeActionBtn(iconOrHtml, title, handler) {
 function updateMessageInDOM(msgId, text, edited) {
   const txt = document.getElementById('msg-text-' + msgId);
   if (txt) { txt.innerHTML = ''; if (text) txt.appendChild(renderText(text)); }
-  // Update Giphy embeds on edit
+  // Update GIF embeds on edit
   const msgEl = document.getElementById('msg-' + msgId);
   if (msgEl) {
-    msgEl.querySelectorAll('.giphy-embed').forEach(el => el.remove());
+    msgEl.querySelectorAll('.gif-embed').forEach(el => el.remove());
     const body = msgEl.querySelector('.msg-body');
     if (body && text) {
-      const giphyUrls = extractGiphyUrls(text);
-      // Insert before reactions or hover actions
+      const gifUrls = extractGifUrls(text);
       const beforeEl = body.querySelector('.msg-reactions') || body.querySelector('.msg-actions');
-      giphyUrls.forEach(g => {
-        const embed = createGiphyEmbed(g.gifUrl, g.shortUrl);
-        embed.dataset.giphyEmbed = '1';
+      gifUrls.forEach(g => {
+        const embed = createGifEmbed(g);
+        embed.dataset.gifEmbed = '1';
         if (beforeEl) body.insertBefore(embed, beforeEl);
         else body.appendChild(embed);
       });
