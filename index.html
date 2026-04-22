@@ -95,7 +95,12 @@
     .composer-row { display:flex; padding:12px; gap:8px; align-items:center }
     .upload-btn { width:32px; height:32px; border-radius:8px; background:none; border:none; color:var(--text-muted); font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:color .2s, background .2s }
     .upload-btn:hover { color:var(--text); background:rgba(255,255,255,0.08) }
-    .input { flex:1; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background:rgba(4,8,14,0.68); color:var(--text); font-size:14px; font-family:inherit; outline:none }
+    .input-wrapper { flex:1; position:relative; display:flex; align-items:center }
+    .input { width:100%; padding:10px 50px 10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background:rgba(4,8,14,0.68); color:var(--text); font-size:14px; font-family:inherit; outline:none; box-sizing:border-box }
+    .input-gif-btn { position:absolute; right:6px; top:50%; transform:translateY(-50%); padding:4px 10px; border-radius:6px; border:none; background:rgba(255,255,255,0.1); color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; transition:all .2s }
+    .input-gif-btn:hover { background:rgba(255,255,255,0.2); color:var(--text) }
+    .header-btn { width:32px; height:32px; border-radius:8px; background:rgba(255,255,255,0.08); border:none; color:var(--text-muted); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s }
+    .header-btn:hover { background:rgba(255,255,255,0.15); color:var(--text) }
     .input::placeholder { color:var(--text-muted) }
     #sendBtn { padding:0 18px; height:38px; border-radius:10px; background:linear-gradient(135deg, var(--accent), #2e64d3); border:none; color:white; cursor:pointer; font-size:14px; font-weight:600; transition:filter .2s, transform .12s; flex-shrink:0; box-shadow:0 10px 22px rgba(63,124,255,0.2) }
     #sendBtn:hover { filter:brightness(1.06); transform:translateY(-1px) }
@@ -490,6 +495,47 @@
     .btn-delete { padding:9px 16px; border-radius:8px; border:none; cursor:pointer; font-size:14px; background:#7c2d2d; color:#fff; transition:background .2s }
     .btn-delete:hover { background:#993a3a }
 
+    /* Owner Panel */
+    #ownerPanelModal .modal { width:500px; max-height:80vh; overflow:hidden }
+    .owner-panel-tabs { display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--border) }
+    .owner-panel-tab { padding:8px 16px; border:none; background:none; color:var(--text-muted); cursor:pointer; font-size:14px; border-bottom:2px solid transparent; transition:all .2s }
+    .owner-panel-tab:hover { color:var(--text); background:var(--panel) }
+    .owner-panel-tab.active { color:var(--accent); border-bottom-color:var(--accent) }
+    .owner-panel-content { max-height:500px; overflow-y:auto }
+    .owner-panel-section { display:none }
+    .owner-panel-section.active { display:block }
+    .owner-channels-list { background:var(--panel); border-radius:8px; padding:8px }
+    .owner-channel-item { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:6px; margin-bottom:4px; transition:background .2s }
+    .owner-channel-item:hover { background:rgba(255,255,255,0.05) }
+    .owner-channel-info { display:flex; align-items:center; gap:10px }
+    .owner-channel-name { font-size:14px; color:var(--text) }
+    .owner-channel-type { font-size:11px; color:var(--text-muted); text-transform:uppercase }
+    .owner-channel-actions { display:flex; gap:6px }
+    .owner-channel-btn { padding:6px 10px; border-radius:6px; border:none; font-size:12px; cursor:pointer; transition:all .2s }
+    .owner-channel-btn.rename { background:var(--accent-soft); color:var(--text) }
+    .owner-channel-btn.rename:hover { background:var(--accent) }
+    .owner-channel-btn.delete { background:rgba(224,112,112,0.2); color:#e07070 }
+    .owner-channel-btn.delete:hover { background:#7c2d2d; color:#fff }
+    .owner-add-channel { display:flex; gap:8px; margin-top:12px }
+    .owner-add-channel input { flex:1; padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(4,8,14,0.5); color:var(--text); font-size:14px }
+    .owner-add-channel select { padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(4,8,14,0.5); color:var(--text); font-size:14px }
+    .owner-add-channel button { padding:10px 16px; border-radius:8px; border:none; background:var(--accent); color:#fff; font-size:14px; cursor:pointer }
+    .owner-members-list { background:var(--panel); border-radius:8px; padding:8px }
+    .owner-member-item { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:6px; margin-bottom:4px; transition:background .2s }
+    .owner-member-item:hover { background:rgba(255,255,255,0.05) }
+    .owner-member-info { display:flex; align-items:center; gap:10px }
+    .owner-member-avatar { width:32px; height:32px; border-radius:50%; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:14px; overflow:hidden }
+    .owner-member-avatar img { width:100%; height:100%; object-fit:cover }
+    .owner-member-details { display:flex; flex-direction:column }
+    .owner-member-name { font-size:14px; color:var(--text) }
+    .owner-member-role { font-size:11px; color:var(--accent) }
+    .owner-member-actions { display:flex; gap:6px }
+    .owner-member-btn { padding:6px 10px; border-radius:6px; border:none; font-size:12px; cursor:pointer; transition:all .2s }
+    .owner-member-btn.kick { background:rgba(255,180,100,0.2); color:#ffb464 }
+    .owner-member-btn.kick:hover { background:#b3742d; color:#fff }
+    .owner-member-btn.ban { background:rgba(224,112,112,0.2); color:#e07070 }
+    .owner-member-btn.ban:hover { background:#7c2d2d; color:#fff }
+
     /* Search Modal */
     .search-tabs { display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--border) }
     .search-tab { padding:8px 16px; border:none; background:none; color:var(--text-muted); cursor:pointer; font-size:13px; border-bottom:2px solid transparent; transition:all .2s }
@@ -719,7 +765,14 @@
   </div>
 
   <div class="chat">
-    <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between"><span id="chatHeaderText"># none</span><button id="dmCallBtn" style="display:none;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px" title="Start voice call"><img class="ri" src="relinkicons/call.svg" alt="call" style="filter:invert(1) sepia(1) saturate(3) hue-rotate(90deg)"></button></div>
+    <div class="chat-header" id="chatHeader" style="display:flex;align-items:center;justify-content:space-between">
+      <span id="chatHeaderText"># none</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="header-btn" id="searchBtn" title="Search messages (Ctrl+F)">🔍</button>
+        <button class="header-btn" id="ownerPanelBtn" title="Server Settings" style="display:none">⚙️</button>
+        <button id="dmCallBtn" style="display:none;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:6px" title="Start voice call"><img class="ri" src="relinkicons/call.svg" alt="call" style="filter:invert(1) sepia(1) saturate(3) hue-rotate(90deg)"></button>
+      </div>
+    </div>
     <!-- DM Call panel — inline above messages -->
     <div class="dm-call-panel" id="dmCallOverlay">
       <div class="dm-call-share-grid" id="dmCallShareGrid"></div>
@@ -764,10 +817,11 @@
       </div>
       <div class="composer-row">
         <input type="file" id="imgFileInput" accept="image/*" style="display:none">
-        <button class="search-btn" id="searchBtn" title="Search messages (Ctrl+F)">🔍</button>
-        <button class="giphy-btn" id="giphyBtn" title="Add GIF">🎭</button>
         <button class="upload-btn" id="uploadImgBtn" title="Upload image">+</button>
-        <input id="inputMsg" class="input" placeholder="Message…" />
+        <div class="input-wrapper">
+          <input id="inputMsg" class="input" placeholder="Message…" />
+          <button class="input-gif-btn" id="giphyBtn" title="Add GIF">GIF</button>
+        </div>
         <button class="btn" id="sendBtn">Send</button>
       </div>
     </div>
@@ -791,17 +845,180 @@
 <!-- Emoji Picker -->
 <div class="emoji-picker" id="emojiPicker">
   <button class="emoji-btn" data-emoji="👍">👍</button>
+  <button class="emoji-btn" data-emoji="👎">👎</button>
   <button class="emoji-btn" data-emoji="❤️">❤️</button>
+  <button class="emoji-btn" data-emoji="💔">💔</button>
   <button class="emoji-btn" data-emoji="😂">😂</button>
+  <button class="emoji-btn" data-emoji="🤣">🤣</button>
   <button class="emoji-btn" data-emoji="😮">😮</button>
+  <button class="emoji-btn" data-emoji="😲">😲</button>
   <button class="emoji-btn" data-emoji="😢">😢</button>
+  <button class="emoji-btn" data-emoji="😭">😭</button>
   <button class="emoji-btn" data-emoji="😡">😡</button>
+  <button class="emoji-btn" data-emoji="🤬">🤬</button>
   <button class="emoji-btn" data-emoji="🔥">🔥</button>
   <button class="emoji-btn" data-emoji="✅">✅</button>
+  <button class="emoji-btn" data-emoji="❌">❌</button>
   <button class="emoji-btn" data-emoji="🎉">🎉</button>
+  <button class="emoji-btn" data-emoji="🎊">🎊</button>
   <button class="emoji-btn" data-emoji="💀">💀</button>
+  <button class="emoji-btn" data-emoji="☠️">☠️</button>
   <button class="emoji-btn" data-emoji="💯">💯</button>
   <button class="emoji-btn" data-emoji="🤔">🤔</button>
+  <button class="emoji-btn" data-emoji="🧐">🧐</button>
+  <button class="emoji-btn" data-emoji="👀">👀</button>
+  <button class="emoji-btn" data-emoji="🙏">🙏</button>
+  <button class="emoji-btn" data-emoji="🤝">🤝</button>
+  <button class="emoji-btn" data-emoji="👏">👏</button>
+  <button class="emoji-btn" data-emoji="🙌">🙌</button>
+  <button class="emoji-btn" data-emoji="👋">👋</button>
+  <button class="emoji-btn" data-emoji="🤷">🤷</button>
+  <button class="emoji-btn" data-emoji="🤦">🤦</button>
+  <button class="emoji-btn" data-emoji="🚀">🚀</button>
+  <button class="emoji-btn" data-emoji="⭐">⭐</button>
+  <button class="emoji-btn" data-emoji="✨">✨</button>
+  <button class="emoji-btn" data-emoji="💫">💫</button>
+  <button class="emoji-btn" data-emoji="🎵">🎵</button>
+  <button class="emoji-btn" data-emoji="🎶">🎶</button>
+  <button class="emoji-btn" data-emoji="🎮">🎮</button>
+  <button class="emoji-btn" data-emoji="🏆">🏆</button>
+  <button class="emoji-btn" data-emoji="🥇">🥇</button>
+  <button class="emoji-btn" data-emoji="🎯">🎯</button>
+  <button class="emoji-btn" data-emoji="⏰">⏰</button>
+  <button class="emoji-btn" data-emoji="🌙">🌙</button>
+  <button class="emoji-btn" data-emoji="☀️">☀️</button>
+  <button class="emoji-btn" data-emoji="🌟">🌟</button>
+  <button class="emoji-btn" data-emoji="⚡">⚡</button>
+  <button class="emoji-btn" data-emoji="💡">💡</button>
+  <button class="emoji-btn" data-emoji="📌">📌</button>
+  <button class="emoji-btn" data-emoji="📍">📍</button>
+  <button class="emoji-btn" data-emoji="❓">❓</button>
+  <button class="emoji-btn" data-emoji="❗">❗</button>
+  <button class="emoji-btn" data-emoji="💢">💢</button>
+  <button class="emoji-btn" data-emoji="♻️">♻️</button>
+  <button class="emoji-btn" data-emoji="🔴">🔴</button>
+  <button class="emoji-btn" data-emoji="🟢">🟢</button>
+  <button class="emoji-btn" data-emoji="🔵">🔵</button>
+  <button class="emoji-btn" data-emoji="⚪">⚪</button>
+  <button class="emoji-btn" data-emoji="⚫">⚫</button>
+  <button class="emoji-btn" data-emoji="🟡">🟡</button>
+  <button class="emoji-btn" data-emoji="🟠">🟠</button>
+  <button class="emoji-btn" data-emoji="🟣">🟣</button>
+  <button class="emoji-btn" data-emoji="🟤">🟤</button>
+  <button class="emoji-btn" data-emoji="🌈">🌈</button>
+  <button class="emoji-btn" data-emoji="🍕">🍕</button>
+  <button class="emoji-btn" data-emoji="🍔">🍔</button>
+  <button class="emoji-btn" data-emoji="🍟">🍟</button>
+  <button class="emoji-btn" data-emoji="🌮">🌮</button>
+  <button class="emoji-btn" data-emoji="🍦">🍦</button>
+  <button class="emoji-btn" data-emoji="🍩">🍩</button>
+  <button class="emoji-btn" data-emoji="🍪">🍪</button>
+  <button class="emoji-btn" data-emoji="🎂">🎂</button>
+  <button class="emoji-btn" data-emoji="🍰">🍰</button>
+  <button class="emoji-btn" data-emoji="☕">☕</button>
+  <button class="emoji-btn" data-emoji="🍺">🍺</button>
+  <button class="emoji-btn" data-emoji="🍷">🍷</button>
+  <button class="emoji-btn" data-emoji="🥂">🥂</button>
+  <button class="emoji-btn" data-emoji="🍻">🍻</button>
+  <button class="emoji-btn" data-emoji="🥃">🥃</button>
+  <button class="emoji-btn" data-emoji="🥤">🥤</button>
+  <button class="emoji-btn" data-emoji="🧃">🧃</button>
+  <button class="emoji-btn" data-emoji="🥛">🥛</button>
+  <button class="emoji-btn" data-emoji="🍵">🍵</button>
+  <button class="emoji-btn" data-emoji="🥡">🥡</button>
+  <button class="emoji-btn" data-emoji="🐱">🐱</button>
+  <button class="emoji-btn" data-emoji="🐶">🐶</button>
+  <button class="emoji-btn" data-emoji="🐭">🐭</button>
+  <button class="emoji-btn" data-emoji="🐹">🐹</button>
+  <button class="emoji-btn" data-emoji="🐰">🐰</button>
+  <button class="emoji-btn" data-emoji="🦊">🦊</button>
+  <button class="emoji-btn" data-emoji="🐻">🐻</button>
+  <button class="emoji-btn" data-emoji="🐼">🐼</button>
+  <button class="emoji-btn" data-emoji="🐨">🐨</button>
+  <button class="emoji-btn" data-emoji="🐯">🐯</button>
+  <button class="emoji-btn" data-emoji="🦁">🦁</button>
+  <button class="emoji-btn" data-emoji="🐮">🐮</button>
+  <button class="emoji-btn" data-emoji="🐷">🐷</button>
+  <button class="emoji-btn" data-emoji="🐸">🐸</button>
+  <button class="emoji-btn" data-emoji="🐵">🐵</button>
+  <button class="emoji-btn" data-emoji="🐔">🐔</button>
+  <button class="emoji-btn" data-emoji="🐧">🐧</button>
+  <button class="emoji-btn" data-emoji="🐦">🐦</button>
+  <button class="emoji-btn" data-emoji="🐤">🐤</button>
+  <button class="emoji-btn" data-emoji="🦅">🦅</button>
+  <button class="emoji-btn" data-emoji="🦉">🦉</button>
+  <button class="emoji-btn" data-emoji="🦇">🦇</button>
+  <button class="emoji-btn" data-emoji="🐺">🐺</button>
+  <button class="emoji-btn" data-emoji="🐗">🐗</button>
+  <button class="emoji-btn" data-emoji="🐴">🐴</button>
+  <button class="emoji-btn" data-emoji="🦄">🦄</button>
+  <button class="emoji-btn" data-emoji="🐝">🐝</button>
+  <button class="emoji-btn" data-emoji="🐛">🐛</button>
+  <button class="emoji-btn" data-emoji="🦋">🦋</button>
+  <button class="emoji-btn" data-emoji="🐌">🐌</button>
+  <button class="emoji-btn" data-emoji="🐞">🐞</button>
+  <button class="emoji-btn" data-emoji="🐜">🐜</button>
+  <button class="emoji-btn" data-emoji="🦟">🦟</button>
+  <button class="emoji-btn" data-emoji="🦗">🦗</button>
+  <button class="emoji-btn" data-emoji="🕷️">🕷️</button>
+  <button class="emoji-btn" data-emoji="🕸️">🕸️</button>
+  <button class="emoji-btn" data-emoji="🦂">🦂</button>
+  <button class="emoji-btn" data-emoji="🐢">🐢</button>
+  <button class="emoji-btn" data-emoji="🐍">🐍</button>
+  <button class="emoji-btn" data-emoji="🦎">🦎</button>
+  <button class="emoji-btn" data-emoji="🦖">🦖</button>
+  <button class="emoji-btn" data-emoji="🦕">🦕</button>
+  <button class="emoji-btn" data-emoji="🐙">🐙</button>
+  <button class="emoji-btn" data-emoji="🦑">🦑</button>
+  <button class="emoji-btn" data-emoji="🦐">🦐</button>
+  <button class="emoji-btn" data-emoji="🦞">🦞</button>
+  <button class="emoji-btn" data-emoji="🦀">🦀</button>
+  <button class="emoji-btn" data-emoji="🐡">🐡</button>
+  <button class="emoji-btn" data-emoji="🐠">🐠</button>
+  <button class="emoji-btn" data-emoji="🐟">🐟</button>
+  <button class="emoji-btn" data-emoji="🐬">🐬</button>
+  <button class="emoji-btn" data-emoji="🐳">🐳</button>
+  <button class="emoji-btn" data-emoji="🦈">🦈</button>
+  <button class="emoji-btn" data-emoji="🐊">🐊</button>
+  <button class="emoji-btn" data-emoji="🐅">🐅</button>
+  <button class="emoji-btn" data-emoji="🐆">🐆</button>
+  <button class="emoji-btn" data-emoji="🦓">🦓</button>
+  <button class="emoji-btn" data-emoji="🦍">🦍</button>
+  <button class="emoji-btn" data-emoji="🐘">🐘</button>
+  <button class="emoji-btn" data-emoji="🦛">🦛</button>
+  <button class="emoji-btn" data-emoji="🦏">🦏</button>
+  <button class="emoji-btn" data-emoji="🐪">🐪</button>
+  <button class="emoji-btn" data-emoji="🐫">🐫</button>
+  <button class="emoji-btn" data-emoji="🦒">🦒</button>
+  <button class="emoji-btn" data-emoji="🦘">🦘</button>
+  <button class="emoji-btn" data-emoji="🐃">🐃</button>
+  <button class="emoji-btn" data-emoji="🐂">🐂</button>
+  <button class="emoji-btn" data-emoji="🐄">🐄</button>
+  <button class="emoji-btn" data-emoji="🐎">🐎</button>
+  <button class="emoji-btn" data-emoji="🐖">🐖</button>
+  <button class="emoji-btn" data-emoji="🐏">🐏</button>
+  <button class="emoji-btn" data-emoji="🐑">🐑</button>
+  <button class="emoji-btn" data-emoji="🦙">🦙</button>
+  <button class="emoji-btn" data-emoji="🐐">🐐</button>
+  <button class="emoji-btn" data-emoji="🐕">🐕</button>
+  <button class="emoji-btn" data-emoji="🐩">🐩</button>
+  <button class="emoji-btn" data-emoji="🦮">🦮</button>
+  <button class="emoji-btn" data-emoji="🐕‍🦺">🐕‍🦺</button>
+  <button class="emoji-btn" data-emoji="🐈">🐈</button>
+  <button class="emoji-btn" data-emoji="🐈‍⬛">🐈‍⬛</button>
+  <button class="emoji-btn" data-emoji="🐓">🐓</button>
+  <button class="emoji-btn" data-emoji="🦃">🦃</button>
+  <button class="emoji-btn" data-emoji="🕊️">🕊️</button>
+  <button class="emoji-btn" data-emoji="🐇">🐇</button>
+  <button class="emoji-btn" data-emoji="🦝">🦝</button>
+  <button class="emoji-btn" data-emoji="🦨">🦨</button>
+  <button class="emoji-btn" data-emoji="🦡">🦡</button>
+  <button class="emoji-btn" data-emoji="🦦">🦦</button>
+  <button class="emoji-btn" data-emoji="🦥">🦥</button>
+  <button class="emoji-btn" data-emoji="🐁">🐁</button>
+  <button class="emoji-btn" data-emoji="🐀">🐀</button>
+  <button class="emoji-btn" data-emoji="🐿️">🐿️</button>
+  <button class="emoji-btn" data-emoji="🦔">🦔</button>
 </div>
 
 <!-- Channel Context Menu -->
@@ -964,6 +1181,43 @@
       <div style="display:flex;gap:10px">
         <button class="modal-cancel" id="editCancel">Cancel</button>
         <button class="modal-confirm" id="editConfirm">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Owner Panel Modal -->
+<div class="modal-overlay" id="ownerPanelModal">
+  <div class="modal">
+    <button class="modal-close" id="ownerPanelClose">×</button>
+    <h2>Server Settings</h2>
+    
+    <div class="owner-panel-tabs">
+      <button class="owner-panel-tab active" data-owner-tab="channels">Channels</button>
+      <button class="owner-panel-tab" data-owner-tab="members">Members</button>
+    </div>
+    
+    <div class="owner-panel-content">
+      <!-- Channels Tab -->
+      <div class="owner-panel-section active" id="ownerChannelsSection">
+        <div class="owner-channels-list" id="ownerChannelsList">
+          <!-- Channels will be populated here -->
+        </div>
+        <div class="owner-add-channel">
+          <input type="text" id="newChannelName" placeholder="Channel name" maxlength="32">
+          <select id="newChannelType">
+            <option value="text">Text</option>
+            <option value="voice">Voice</option>
+          </select>
+          <button id="createChannelBtn">Create</button>
+        </div>
+      </div>
+      
+      <!-- Members Tab -->
+      <div class="owner-panel-section" id="ownerMembersSection">
+        <div class="owner-members-list" id="ownerMembersList">
+          <!-- Members will be populated here -->
+        </div>
       </div>
     </div>
   </div>
@@ -2535,6 +2789,9 @@ function addMessageButtonListeners() {
 setTimeout(addMessageButtonListeners, 1000);
 
 // Message formatting function
+// Regex to detect GIF URLs (same as in extractGifUrls)
+const GIF_URL_REGEX = /https?:\/\/[^\s]+\.(?:gif|gifv|webm)(?:\?[^\s]*)?|https?:\/\/(?:www\.)?giphy\.com\/(?:gifs|gif|clips)\/[^\s?]+|https?:\/\/gph\.is\/[a-zA-Z0-9_-]+|https?:\/\/media\.giphy\.com\/media\/[^\s]+/gi;
+
 function formatMessageText(text) {
   if (!text) return '';
   
@@ -2554,7 +2811,17 @@ function formatMessageText(text) {
   formatted = formatted.replace(/`(.+?)`/g, '<code style="background:rgba(255,255,255,0.1);padding:2px 4px;border-radius:3px;font-family:monospace">$1</code>');
   
   // Links: http://example.com -> <a href="http://example.com" target="_blank">http://example.com</a>
-  formatted = formatted.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color:var(--accent-hover)">$1</a>');
+  // But skip GIF URLs - they'll be embedded instead
+  formatted = formatted.replace(/(https?:\/\/[^\s]+)/g, (match) => {
+    // Check if it's a GIF URL
+    if (GIF_URL_REGEX.test(match)) {
+      return ''; // Hide GIF URLs, they'll be embedded separately
+    }
+    return '<a href="' + match + '" target="_blank" style="color:var(--accent-hover)">' + match + '</a>';
+  });
+  
+  // Clean up multiple spaces left from removed GIF URLs
+  formatted = formatted.replace(/\s{2,}/g, ' ').trim();
   
   // Mentions: @username -> <span class="mention">@username</span>
   formatted = formatted.replace(/@(\w+)/g, '<span class="mention" style="color:var(--accent);font-weight:600">@$1</span>');
@@ -2863,6 +3130,7 @@ function resetServerView() {
   inviteBadge.style.display = 'none';
   document.getElementById('chatHeaderText').textContent = '# none';
   document.getElementById('dmCallBtn').style.display = 'none';
+  document.getElementById('ownerPanelBtn').style.display = 'none';
   setRightLabel('Members');
 }
 
@@ -3045,6 +3313,182 @@ document.getElementById('editDeleteBtn').addEventListener('click', async () => {
   } catch (e) { alert(e.message); }
 });
 
+// Owner Panel
+let ownerPanelServerId = null;
+
+function openOwnerPanel(serverId) {
+  ownerPanelServerId = serverId;
+  document.getElementById('ownerPanelModal').classList.add('open');
+  loadOwnerPanelChannels();
+  loadOwnerPanelMembers();
+}
+
+function closeOwnerPanel() {
+  document.getElementById('ownerPanelModal').classList.remove('open');
+  ownerPanelServerId = null;
+}
+
+document.getElementById('ownerPanelClose').addEventListener('click', closeOwnerPanel);
+document.getElementById('ownerPanelModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('ownerPanelModal')) closeOwnerPanel();
+});
+document.getElementById('ownerPanelBtn').addEventListener('click', () => {
+  if (currentServer) openOwnerPanel(currentServer);
+});
+
+// Owner Panel Tabs
+document.querySelectorAll('.owner-panel-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.owner-panel-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.owner-panel-section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    const tabName = tab.dataset.ownerTab;
+    document.getElementById('owner' + tabName.charAt(0).toUpperCase() + tabName.slice(1) + 'Section').classList.add('active');
+  });
+});
+
+async function loadOwnerPanelChannels() {
+  if (!ownerPanelServerId) return;
+  const list = document.getElementById('ownerChannelsList');
+  list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Loading...</div>';
+  try {
+    const channels = await api('/api/servers/' + ownerPanelServerId + '/channels');
+    list.innerHTML = '';
+    channels.forEach(ch => {
+      const item = document.createElement('div');
+      item.className = 'owner-channel-item';
+      const isVoice = ch.type === 'voice';
+      item.innerHTML = `
+        <div class="owner-channel-info">
+          <span class="owner-channel-type">${isVoice ? '🔊' : '#'}</span>
+          <span class="owner-channel-name">${escapeHtml(ch.name)}</span>
+        </div>
+        <div class="owner-channel-actions">
+          <button class="owner-channel-btn rename" data-channel-id="${ch.id}" data-action="rename">Rename</button>
+          <button class="owner-channel-btn delete" data-channel-id="${ch.id}" data-action="delete">Delete</button>
+        </div>
+      `;
+      list.appendChild(item);
+    });
+    // Add event listeners
+    list.querySelectorAll('.owner-channel-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const channelId = btn.dataset.channelId;
+        const action = btn.dataset.action;
+        if (action === 'rename') {
+          const newName = prompt('Enter new channel name:');
+          if (newName && newName.trim()) {
+            try {
+              await api('/api/servers/' + ownerPanelServerId + '/channels/' + channelId, {
+                method: 'PATCH',
+                body: { name: newName.trim() }
+              });
+              loadOwnerPanelChannels();
+              if (currentServer === ownerPanelServerId) await selectServer(ownerPanelServerId);
+            } catch (e) { alert(e.message); }
+          }
+        } else if (action === 'delete') {
+          if (confirm('Delete this channel? This cannot be undone.')) {
+            try {
+              await api('/api/servers/' + ownerPanelServerId + '/channels/' + channelId, { method: 'DELETE' });
+              loadOwnerPanelChannels();
+              if (currentServer === ownerPanelServerId) await selectServer(ownerPanelServerId);
+            } catch (e) { alert(e.message); }
+          }
+        }
+      });
+    });
+  } catch (e) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:#e07070">Failed to load channels</div>';
+  }
+}
+
+async function loadOwnerPanelMembers() {
+  if (!ownerPanelServerId) return;
+  const list = document.getElementById('ownerMembersList');
+  list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Loading...</div>';
+  try {
+    const members = await api('/api/servers/' + ownerPanelServerId + '/members');
+    const server = await api('/api/servers/' + ownerPanelServerId);
+    list.innerHTML = '';
+    members.forEach(m => {
+      const isOwner = m.uid === server.owner_uid;
+      const item = document.createElement('div');
+      item.className = 'owner-member-item';
+      const avatar = m.avatar ? `<img src="${m.avatar}" alt="">` : (m.display_name || m.username)[0].toUpperCase();
+      item.innerHTML = `
+        <div class="owner-member-info">
+          <div class="owner-member-avatar">${avatar}</div>
+          <div class="owner-member-details">
+            <span class="owner-member-name">${escapeHtml(m.display_name || m.username)}</span>
+            ${isOwner ? '<span class="owner-member-role">👑 Owner</span>' : ''}
+          </div>
+        </div>
+        ${!isOwner ? `
+          <div class="owner-member-actions">
+            <button class="owner-member-btn kick" data-uid="${m.uid}">Kick</button>
+            <button class="owner-member-btn ban" data-uid="${m.uid}">Ban</button>
+          </div>
+        ` : ''}
+      `;
+      list.appendChild(item);
+    });
+    // Add event listeners
+    list.querySelectorAll('.owner-member-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const uid = btn.dataset.uid;
+        const isKick = btn.classList.contains('kick');
+        const memberName = btn.closest('.owner-member-item').querySelector('.owner-member-name').textContent;
+        if (confirm(`${isKick ? 'Kick' : 'Ban'} ${memberName}?${isKick ? '' : ' They will not be able to rejoin.'}`)) {
+          try {
+            if (isKick) {
+              // Kick - just delete member
+              await api('/api/servers/' + ownerPanelServerId + '/members/' + uid, { method: 'DELETE' });
+            } else {
+              // Ban - use ban endpoint
+              await api('/api/servers/' + ownerPanelServerId + '/bans', {
+                method: 'POST',
+                body: { uid }
+              });
+            }
+            loadOwnerPanelMembers();
+            // Also refresh the server view if we're in the same server
+            if (currentServer === ownerPanelServerId) {
+              currentServerMembers = currentServerMembers.filter(m => m.uid !== uid);
+              refreshRightPanel();
+            }
+          } catch (e) { alert(e.message); }
+        }
+      });
+    });
+  } catch (e) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:#e07070">Failed to load members</div>';
+  }
+}
+
+// Create channel from owner panel
+document.getElementById('createChannelBtn').addEventListener('click', async () => {
+  if (!ownerPanelServerId) return;
+  const name = document.getElementById('newChannelName').value.trim();
+  const type = document.getElementById('newChannelType').value;
+  if (!name) return alert('Please enter a channel name');
+  try {
+    await api('/api/servers/' + ownerPanelServerId + '/channels', {
+      method: 'POST',
+      body: { name, type }
+    });
+    document.getElementById('newChannelName').value = '';
+    loadOwnerPanelChannels();
+    if (currentServer === ownerPanelServerId) await selectServer(ownerPanelServerId);
+  } catch (e) { alert(e.message); }
+});
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 async function loadMyServers() {
   if (!currentUser?.email_verified) return;
   const servers = await api('/api/servers');
@@ -3111,6 +3555,7 @@ async function selectServer(serverId) {
     const isOwner = server.owner_uid === currentUser.uid;
     document.getElementById('addChannelBtn').style.display = isOwner ? 'inline-block' : 'none';
     document.getElementById('addVcBtn').style.display = isOwner ? 'inline-block' : 'none';
+    document.getElementById('ownerPanelBtn').style.display = isOwner ? 'flex' : 'none';
     clearServerNotif(serverId);
 
     const channels = await api('/api/servers/' + serverId + '/channels');
