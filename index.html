@@ -1175,6 +1175,7 @@ let signupBusy = false;
 let socketHiddenTimer = null;
 let reconnectAfterHidden = false;
 let composerNoticeTimer = null;
+let selectServerBusy = false;
 const channelMessageCache = new Map();
 const dmMessageCache = new Map();
 
@@ -3077,69 +3078,75 @@ async function loadMyServers() {
 }
 
 async function selectServer(serverId) {
-  if (typeof currentVcChannel !== 'undefined' && currentVcChannel && currentServer && currentServer !== serverId) {
-    await leaveVoiceChannel();
-  }
-  inDM = false;
-  currentServer  = serverId;
-  currentChannel = null;
-  currentChannelId = null;
-  currentDMUid   = null;
-  currentDMId    = null;
-  currentDMName  = null;
-  currentPresenceMembers = {};
-  if (socket) socket.emit('leave:channel');
-
-  const server = await api('/api/servers/' + serverId);
-  currentServerData = server;
-  serverHeader.textContent = server.name;
-  currentInvite = server.invite;
-  inviteBadge.style.display = 'inline';
-  inviteBadge.title = 'Invite code: ' + currentInvite + ' (click to copy)';
-
-  document.getElementById('chatHeaderText').textContent = '# none';
-  document.getElementById('dmCallBtn').style.display = 'none';
-  channelList.innerHTML = '';
-  messagesBox.innerHTML = '';
-  onlineList.innerHTML  = '';
-  setRightLabel('Online');
-
-  const isOwner = server.owner_uid === currentUser.uid;
-  document.getElementById('addChannelBtn').style.display = isOwner ? 'inline-block' : 'none';
-  document.getElementById('addVcBtn').style.display = isOwner ? 'inline-block' : 'none';
-  clearServerNotif(serverId);
-
-  const channels = await api('/api/servers/' + serverId + '/channels');
-
-  const textLabel = document.createElement('div');
-  textLabel.className = 'channel-section-label';
-  textLabel.innerHTML = '<span>Text Channels</span>';
-  channelList.appendChild(textLabel);
-
-  const textChannels = channels.filter(c => c.type !== 'voice');
-  textChannels.forEach(c => addChannelItem(c.name, c.id, isOwner));
-
-  const vcLabel = document.createElement('div');
-  vcLabel.className = 'channel-section-label';
-  vcLabel.innerHTML = '<span>Voice Channels</span>';
-  channelList.appendChild(vcLabel);
-
-  const vcChannels = channels.filter(c => c.type === 'voice');
-  vcChannels.forEach(c => addVcChannelItem(c.name, c.id));
-
-  // Load VC participant state so observers can see who's in voice channels
-  loadVcServerState(serverId);
-
-  // Load all server members for the online list
+  if (selectServerBusy) return;
+  selectServerBusy = true;
   try {
-    currentServerMembers = await api('/api/servers/' + serverId + '/members');
-  } catch (e) {
-    currentServerMembers = [];
-  }
-  refreshRightPanel();
+    if (typeof currentVcChannel !== 'undefined' && currentVcChannel && currentServer && currentServer !== serverId) {
+      await leaveVoiceChannel();
+    }
+    inDM = false;
+    currentServer  = serverId;
+    currentChannel = null;
+    currentChannelId = null;
+    currentDMUid   = null;
+    currentDMId    = null;
+    currentDMName  = null;
+    currentPresenceMembers = {};
+    if (socket) socket.emit('leave:channel');
 
-  if (textChannels.length) joinChannel(textChannels[0].name, textChannels[0].id);
-  loadMyServers();
+    const server = await api('/api/servers/' + serverId);
+    currentServerData = server;
+    serverHeader.textContent = server.name;
+    currentInvite = server.invite;
+    inviteBadge.style.display = 'inline';
+    inviteBadge.title = 'Invite code: ' + currentInvite + ' (click to copy)';
+
+    document.getElementById('chatHeaderText').textContent = '# none';
+    document.getElementById('dmCallBtn').style.display = 'none';
+    channelList.innerHTML = '';
+    messagesBox.innerHTML = '';
+    onlineList.innerHTML  = '';
+    setRightLabel('Online');
+
+    const isOwner = server.owner_uid === currentUser.uid;
+    document.getElementById('addChannelBtn').style.display = isOwner ? 'inline-block' : 'none';
+    document.getElementById('addVcBtn').style.display = isOwner ? 'inline-block' : 'none';
+    clearServerNotif(serverId);
+
+    const channels = await api('/api/servers/' + serverId + '/channels');
+
+    const textLabel = document.createElement('div');
+    textLabel.className = 'channel-section-label';
+    textLabel.innerHTML = '<span>Text Channels</span>';
+    channelList.appendChild(textLabel);
+
+    const textChannels = channels.filter(c => c.type !== 'voice');
+    textChannels.forEach(c => addChannelItem(c.name, c.id, isOwner));
+
+    const vcLabel = document.createElement('div');
+    vcLabel.className = 'channel-section-label';
+    vcLabel.innerHTML = '<span>Voice Channels</span>';
+    channelList.appendChild(vcLabel);
+
+    const vcChannels = channels.filter(c => c.type === 'voice');
+    vcChannels.forEach(c => addVcChannelItem(c.name, c.id));
+
+    // Load VC participant state so observers can see who's in voice channels
+    loadVcServerState(serverId);
+
+    // Load all server members for the online list
+    try {
+      currentServerMembers = await api('/api/servers/' + serverId + '/members');
+    } catch (e) {
+      currentServerMembers = [];
+    }
+    refreshRightPanel();
+
+    if (textChannels.length) joinChannel(textChannels[0].name, textChannels[0].id);
+    loadMyServers();
+  } finally {
+    selectServerBusy = false;
+  }
 }
 
 function addChannelItem(name, id, isOwner) {
