@@ -113,6 +113,8 @@
     .member-info { min-width:0 }
     .member-name { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
     .member-tag { font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .member-item.offline { opacity:0.7 }
+    .member-item.offline .member-name { color:var(--text-muted) }
 
     /* Mentions */
     .mention { background:rgba(45,74,124,0.35); color:#7fa8e8; border-radius:3px; padding:0 3px; font-weight:600; cursor:pointer }
@@ -772,7 +774,7 @@
   </div>
 
   <div class="right">
-    <div class="right-section-label">Online in channel</div>
+    <div class="right-section-label" id="right-label">Members</div>
     <div id="onlineList"></div>
   </div>
 </div>
@@ -1157,12 +1159,14 @@ let currentDMId    = null;
 let replyingTo     = null;
 let typingTimeout  = null;
 const serverNotifCounts = {};
+const serverPingCounts = {};
 let dmNotifCount   = 0;
 let emojiTargetMsg = null;
 let chCtxChannel   = null;
 let chCtxChannelId = null;
 let currentServerData = null;
 let currentPresenceMembers = {};
+let currentServerMembers = [];
 let channelLoadToken = 0;
 let dmLoadToken = 0;
 let lastMessageSentAt = 0;
@@ -1221,26 +1225,33 @@ function setRightLabel(text) {
   if (label) label.textContent = text;
 }
 
-function renderMemberList(members) {
+function renderMemberList(members, showOfflineStatus = false) {
   onlineList.innerHTML = '';
   const frag = document.createDocumentFragment();
   members.forEach(member => {
+    const isOnline = member.online !== false; // default to online if not specified
     const item = document.createElement('div');
     item.className = 'member-item clickable';
-    item.title = `${member.displayName || member.display_name || member.username}\n@${member.username || ''}`.trim();
+    if (!isOnline && showOfflineStatus) item.classList.add('offline');
+    item.title = `${member.displayName || member.display_name || member.username}\n@${member.username || ''}${showOfflineStatus ? (isOnline ? '\n🟢 Online' : '\n⚫ Offline') : ''}`.trim();
     if (member.uid) item.addEventListener('click', e => openProfileCard(member.uid, e));
 
     const avWrap = document.createElement('div');
     avWrap.className = 'member-avatar';
+    if (!isOnline && showOfflineStatus) avWrap.style.opacity = '0.5';
     if (member.avatar) avWrap.innerHTML = `<img src="${member.avatar}" alt="">`;
     else avWrap.textContent = (member.displayName || member.display_name || member.username || '?')[0].toUpperCase();
 
     const dot = document.createElement('div');
     dot.className = 'member-status';
+    if (!isOnline && showOfflineStatus) {
+      dot.style.background = '#747f8d'; // gray for offline
+    }
     avWrap.appendChild(dot);
 
     const info = document.createElement('div');
     info.className = 'member-info';
+    if (!isOnline && showOfflineStatus) info.style.opacity = '0.6';
     const name = document.createElement('div');
     name.className = 'member-name';
     name.textContent = member.displayName || member.display_name || member.username;
@@ -1263,9 +1274,22 @@ function refreshRightPanel() {
     renderMemberList(Object.values(vcParticipantData));
     return;
   }
-  const members = Object.values(currentPresenceMembers || {});
-  setRightLabel(`Online - ${members.length}`);
-  renderMemberList(members);
+  // Show all server members with online/offline status
+  if (currentServer && currentServerMembers.length > 0) {
+    const onlineUids = new Set(Object.keys(currentPresenceMembers || {}));
+    const allMembers = currentServerMembers.map(m => ({
+      ...m,
+      online: onlineUids.has(m.uid),
+      displayName: m.display_name || m.displayName
+    })).sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+    const onlineCount = allMembers.filter(m => m.online).length;
+    setRightLabel(`Members — ${onlineCount}/${allMembers.length} Online`);
+    renderMemberList(allMembers, true);
+  } else {
+    const members = Object.values(currentPresenceMembers || {});
+    setRightLabel(`Online — ${members.length}`);
+    renderMemberList(members);
+  }
 }
 
 function showComposerNotice(text, tone = 'info', timeoutMs = 2200) {
@@ -1414,26 +1438,6 @@ function connectSocket() {
   socket.on('presence:update', members => {
     currentPresenceMembers = members || {};
     refreshRightPanel();
-    return;
-    onlineList.innerHTML = '';
-    document.getElementById('right-label').textContent = 'Online — ' + Object.keys(members).length;
-    Object.values(members).forEach(p => {
-      const item = document.createElement('div');
-      item.className = 'member-item';
-      const avWrap = document.createElement('div');
-      avWrap.className = 'member-avatar';
-      if (p.avatar) avWrap.innerHTML = `<img src="${p.avatar}" alt="">`;
-      else avWrap.textContent = (p.displayName || p.username || '?')[0].toUpperCase();
-      const dot = document.createElement('div');
-      dot.className = 'member-status';
-      avWrap.appendChild(dot);
-      const info = document.createElement('div');
-      info.className = 'member-info';
-      info.innerHTML = `<div class="member-name">${p.displayName || p.username}</div><div class="member-tag">@${p.username}</div>`;
-      item.appendChild(avWrap);
-      item.appendChild(info);
-      onlineList.appendChild(item);
-    });
   });
 
   // Typing
@@ -1481,6 +1485,9 @@ function connectSocket() {
   socket.on('vc:peer-left',      data  => handleVcPeerLeft(data.uid));
   socket.on('vc:peer-muted',     data  => handleVcPeerMuted(data));
   socket.on('vc:signal',         data  => handleVcSignal(data));
+
+  // VC observer updates — see who's in voice channels even when not joined
+  socket.on('vc:server-peer-update', data => handleVcServerPeerUpdate(data));
 
   // DM call signals
   socket.on('dmcall:signal',  data => handleDmCallSignal(data));
@@ -2847,6 +2854,7 @@ function resetServerView() {
   currentChannelId = null;
   currentInvite = null;
   currentPresenceMembers = {};
+  currentServerMembers = [];
   serverHeader.textContent = 'No server';
   channelList.innerHTML = '';
   messagesBox.innerHTML = '';
@@ -2854,7 +2862,7 @@ function resetServerView() {
   inviteBadge.style.display = 'none';
   document.getElementById('chatHeaderText').textContent = '# none';
   document.getElementById('dmCallBtn').style.display = 'none';
-  setRightLabel('Online');
+  setRightLabel('Members');
 }
 
 async function leaveCurrentServer(serverId) {
@@ -2975,7 +2983,9 @@ document.getElementById('ctxDelete').addEventListener('click', async () => {
   ctxMenu.classList.remove('open');
   if (!confirm(`Delete "${ctxServerData.name}"? This cannot be undone.`)) return;
   try {
-    await leaveCurrentServer(ctxServerId);
+    await api('/api/servers/' + ctxServerId, { method: 'DELETE' });
+    if (currentServer === ctxServerId) resetServerView();
+    await loadMyServers();
   } catch (e) { alert(e.message); }
 });
 
@@ -3028,7 +3038,9 @@ document.getElementById('editDeleteBtn').addEventListener('click', async () => {
   if (!confirm(`Delete "${ctxServerData?.name}"? This cannot be undone.`)) return;
   closeEditModal();
   try {
-    await leaveCurrentServer(ctxServerId);
+    await api('/api/servers/' + ctxServerId, { method: 'DELETE' });
+    if (currentServer === ctxServerId) resetServerView();
+    await loadMyServers();
   } catch (e) { alert(e.message); }
 });
 
@@ -3058,10 +3070,9 @@ async function loadMyServers() {
     const badge = document.createElement('div');
     badge.className = 'notif-badge hidden';
     badge.id = 'server-badge-' + s.id;
-    const count = serverNotifCounts[s.id] || 0;
-    if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.classList.remove('hidden'); }
     wrap.appendChild(btn); wrap.appendChild(badge);
     iconsContainer.appendChild(wrap);
+    updateServerBadge(s.id);
   });
 }
 
@@ -3115,6 +3126,17 @@ async function selectServer(serverId) {
 
   const vcChannels = channels.filter(c => c.type === 'voice');
   vcChannels.forEach(c => addVcChannelItem(c.name, c.id));
+
+  // Load VC participant state so observers can see who's in voice channels
+  loadVcServerState(serverId);
+
+  // Load all server members for the online list
+  try {
+    currentServerMembers = await api('/api/servers/' + serverId + '/members');
+  } catch (e) {
+    currentServerMembers = [];
+  }
+  refreshRightPanel();
 
   if (textChannels.length) joinChannel(textChannels[0].name, textChannels[0].id);
   loadMyServers();
@@ -3403,8 +3425,12 @@ function handleNewMessage(m) {
       sendBrowserNotif(m.display_name || m.username, m.text);
     }
   } else if (!inDM && m.server_id) {
-    addServerNotif(m.server_id);
-    if (mentioned) sendBrowserNotif(m.display_name || m.username, m.text);
+    if (mentioned) {
+      addServerPing(m.server_id);
+      sendBrowserNotif(m.display_name || m.username, m.text);
+    } else {
+      addServerNotif(m.server_id);
+    }
   }
 }
 
@@ -3715,18 +3741,41 @@ document.getElementById('lightbox').addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 
 // ── Notification helpers ───────────────────────────────────────────
-function addServerNotif(serverId) {
-  if (serverId === currentServer) return;
+function addServerNotif(serverId, isPing = false) {
+  if (serverId === currentServer && isPing) return;
+  if (serverId === currentServer && !isPing) return;
   serverNotifCounts[serverId] = (serverNotifCounts[serverId] || 0) + 1;
+  if (isPing) {
+    serverPingCounts[serverId] = (serverPingCounts[serverId] || 0) + 1;
+  }
   updateServerBadge(serverId);
 }
-function clearServerNotif(serverId) { serverNotifCounts[serverId] = 0; updateServerBadge(serverId); }
+function addServerPing(serverId) {
+  addServerNotif(serverId, true);
+}
+function clearServerNotif(serverId) {
+  serverNotifCounts[serverId] = 0;
+  serverPingCounts[serverId] = 0;
+  updateServerBadge(serverId);
+}
 function updateServerBadge(serverId) {
   const badge = document.getElementById('server-badge-' + serverId);
   if (!badge) return;
   const count = serverNotifCounts[serverId] || 0;
-  if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.classList.remove('hidden'); }
-  else badge.classList.add('hidden');
+  const hasPing = (serverPingCounts[serverId] || 0) > 0;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.classList.remove('hidden');
+    // Red background for pings, normal red for unread
+    if (hasPing) {
+      badge.style.background = '#ed4245'; // bright red for pings
+    } else {
+      badge.style.background = '#747f8d'; // gray for regular unread
+    }
+  } else {
+    badge.classList.add('hidden');
+    badge.style.background = '#ed4245';
+  }
 }
 function addDmNotif() { if (inDM) return; dmNotifCount++; updateDmBadge(); }
 function clearDmNotif() { dmNotifCount = 0; updateDmBadge(); }
@@ -3826,16 +3875,6 @@ if ('Notification' in window && Notification.permission === 'default' && notific
   Notification.requestPermission();
 }
 
-// Add label to right panel if not present
-(function() {
-  const right = document.querySelector('.right');
-  if (right && !document.getElementById('right-label')) {
-    const lbl = document.createElement('div');
-    lbl.className = 'right-section-label'; lbl.id = 'right-label'; lbl.textContent = 'Online';
-    right.insertBefore(lbl, right.firstChild);
-  }
-})();
-
 // ══════════════════════════════════════════════════════════════════
 //  DIRECT MESSAGES
 // ══════════════════════════════════════════════════════════════════
@@ -3856,6 +3895,7 @@ async function loadDMList() {
   currentDMName  = null;
   currentInvite  = null;
   currentPresenceMembers = {};
+  currentServerMembers = [];
   clearDmNotif();
 
   serverHeader.textContent = 'Direct Messages';
@@ -4307,6 +4347,61 @@ function removeVcParticipantRow(uid) {
   if (statusIndicator) statusIndicator.remove();
 }
 
+// ── VC Observer: show participants in voice channels you're not in ──
+function renderVcObserverParticipants(channelId, peers) {
+  const partEl = document.getElementById('vc-parts-' + channelId);
+  if (!partEl) return;
+
+  // If user is currently in THIS VC channel, skip — the active VC handlers manage it
+  if (currentVcChannelId === channelId) return;
+
+  // Clear existing observer rows for this channel
+  partEl.innerHTML = '';
+
+  if (!peers || !peers.length) return;
+
+  peers.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'vc-participant';
+    row.title = `${p.displayName || p.username}\n@${p.username || ''}`.trim();
+    row.addEventListener('click', e => openProfileCard(p.uid, e));
+
+    const av = document.createElement('div');
+    av.className = 'vc-participant-avatar';
+    if (p.avatar) av.innerHTML = `<img src="${p.avatar}">`;
+    else av.textContent = (p.displayName || p.username || '?')[0].toUpperCase();
+
+    const nm = document.createElement('span');
+    nm.className = 'vc-participant-name';
+    nm.textContent = p.displayName || p.username;
+
+    row.appendChild(av);
+    row.appendChild(nm);
+    if (p.muted) {
+      const muteIcon = document.createElement('span');
+      muteIcon.className = 'vc-mute-icon';
+      muteIcon.innerHTML = '<img class="ri-sm" src="relinkicons/muted.svg" alt="muted">';
+      row.appendChild(muteIcon);
+      row.classList.add('muted');
+    }
+    partEl.appendChild(row);
+  });
+}
+
+function handleVcServerPeerUpdate({ channelId, peers }) {
+  renderVcObserverParticipants(channelId, peers);
+}
+
+async function loadVcServerState(serverId) {
+  if (!socket || !serverId) return;
+  socket.emit('vc:server-state', { serverId }, state => {
+    if (!state) return;
+    Object.entries(state).forEach(([channelId, peers]) => {
+      renderVcObserverParticipants(channelId, peers);
+    });
+  });
+}
+
 function updateUserStatus(uid, status) {
   const statusIndicator = document.getElementById('status-' + uid);
   if (!statusIndicator) return;
@@ -4347,6 +4442,10 @@ async function joinVoiceChannel(name, id) {
   currentVcChannel   = name;
   currentVcChannelId = id;
   isMuted            = false;
+
+  // Clear any observer rows for this channel — active VC handlers will manage it now
+  const obsPartEl = document.getElementById('vc-parts-' + id);
+  if (obsPartEl) obsPartEl.innerHTML = '';
 
   // Show ourselves in the sidebar immediately
   vcParticipantData[currentUser.uid] = {
@@ -4398,6 +4497,7 @@ async function leaveVoiceChannel() {
   const partEl = document.getElementById('vc-parts-' + currentVcChannelId);
   if (partEl) partEl.innerHTML = '';
 
+  const leftServerId = currentServer;
   currentVcChannel   = null;
   currentVcChannelId = null;
   isMuted            = false;
@@ -4410,6 +4510,9 @@ async function leaveVoiceChannel() {
   document.getElementById('vcCamBtn').classList.remove('active');
   document.getElementById('vcShareBtn').classList.remove('active');
   refreshRightPanel();
+
+  // Reload VC observer state so we can still see who's in voice channels
+  loadVcServerState(leftServerId);
 }
 
 document.getElementById('vcLeaveBtn').addEventListener('click', leaveVoiceChannel);
