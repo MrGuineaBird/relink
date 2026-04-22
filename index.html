@@ -3267,8 +3267,9 @@ async function joinChannel(chName, chId) {
 
   // Fetch history
   try {
-    const msgs = await api('/api/servers/' + currentServer + '/channels/' + chId + '/messages');
+    const data = await api('/api/servers/' + currentServer + '/channels/' + chId + '/messages');
     if (loadToken !== channelLoadToken || currentChannelId !== chId) return;
+    const msgs = data.messages || data;
     const recent = msgs.slice(-APP_LIMITS.maxRenderedMessages);
     setCachedMessages(channelMessageCache, cacheKey, recent, APP_LIMITS.maxRenderedMessages);
     messagesBox.innerHTML = '';
@@ -3277,7 +3278,9 @@ async function joinChannel(chName, chId) {
     if (msgs.length > recent.length) {
       showComposerNotice(`Showing the latest ${recent.length} messages to keep RELINK fast on low-memory devices.`, 'info', 3200);
     }
-  } catch {}
+  } catch (e) {
+    messagesBox.innerHTML = '<div class="home-empty" style="padding:22px 16px;color:var(--text-muted)">Failed to load messages. <button class="btn" style="margin-left:8px;padding:4px 10px;font-size:12px" onclick="joinChannel(currentChannel, currentChannelId)">Retry</button></div>';
+  }
 
   // Join socket room
   if (socket) socket.emit('join:channel', { serverId: currentServer, channelId: chId });
@@ -3971,14 +3974,17 @@ function openDM(uid, username, dmId) {
   const loadToken = ++dmLoadToken;
   if (socket) socket.emit('join:dm', { dmId });
 
-  api('/api/social/dms/' + dmId + '/messages').then(msgs => {
+  api('/api/social/dms/' + dmId + '/messages').then(data => {
     if (loadToken !== dmLoadToken || currentDMId !== dmId) return;
+    const msgs = data.messages || data;
     const recent = msgs.slice(-APP_LIMITS.maxRenderedDMs);
     setCachedMessages(dmMessageCache, dmId, recent, APP_LIMITS.maxRenderedDMs);
     messagesBox.innerHTML = '';
     recent.forEach(m => messagesBox.appendChild(buildDMMessageEl(m)));
     messagesBox.scrollTop = messagesBox.scrollHeight;
-  }).catch(() => {});
+  }).catch(() => {
+    messagesBox.innerHTML = '<div class="home-empty" style="padding:22px 16px;color:var(--text-muted)">Failed to load messages. <button class="btn" style="margin-left:8px;padding:4px 10px;font-size:12px" onclick="openDM(currentDMUid, currentDMName, currentDMId)">Retry</button></div>';
+  });
 
   listenDMCall(uid);
 }
